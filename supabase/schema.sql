@@ -1,6 +1,5 @@
--- Mental health forum schema (Supabase / Postgres)
--- Includes tables: profiles, categories, posts, comments, reactions
--- Includes RLS policies so users can only edit/delete their own content
+-- The Internet Harbor (Supabase / Postgres) schema
+-- Idempotent: safe to paste into Supabase SQL Editor multiple times.
 
 -- Extensions (safe if already enabled)
 create extension if not exists "pgcrypto";
@@ -27,30 +26,47 @@ create table if not exists public.profiles (
   updated_at timestamptz not null default now()
 );
 
+drop trigger if exists set_profiles_updated_at on public.profiles;
 create trigger set_profiles_updated_at
 before update on public.profiles
 for each row execute procedure public.set_updated_at();
 
 alter table public.profiles enable row level security;
 
-create policy "profiles are viewable by everyone"
-on public.profiles
-for select
-to public
-using (true);
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='profiles' and policyname='profiles are viewable by everyone'
+  ) then
+    create policy "profiles are viewable by everyone"
+    on public.profiles
+    for select
+    to public
+    using (true);
+  end if;
 
-create policy "users can insert their own profile"
-on public.profiles
-for insert
-to authenticated
-with check (auth.uid() = id);
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='profiles' and policyname='users can insert their own profile'
+  ) then
+    create policy "users can insert their own profile"
+    on public.profiles
+    for insert
+    to authenticated
+    with check (auth.uid() = id);
+  end if;
 
-create policy "users can update their own profile"
-on public.profiles
-for update
-to authenticated
-using (auth.uid() = id)
-with check (auth.uid() = id);
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='profiles' and policyname='users can update their own profile'
+  ) then
+    create policy "users can update their own profile"
+    on public.profiles
+    for update
+    to authenticated
+    using (auth.uid() = id)
+    with check (auth.uid() = id);
+  end if;
+end
+$$;
 
 -- CATEGORIES
 create table if not exists public.categories (
@@ -63,17 +79,26 @@ create table if not exists public.categories (
   updated_at timestamptz not null default now()
 );
 
+drop trigger if exists set_categories_updated_at on public.categories;
 create trigger set_categories_updated_at
 before update on public.categories
 for each row execute procedure public.set_updated_at();
 
 alter table public.categories enable row level security;
 
-create policy "categories are viewable by everyone"
-on public.categories
-for select
-to public
-using (true);
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='categories' and policyname='categories are viewable by everyone'
+  ) then
+    create policy "categories are viewable by everyone"
+    on public.categories
+    for select
+    to public
+    using (true);
+  end if;
+end
+$$;
 
 -- POSTS
 create table if not exists public.posts (
@@ -91,36 +116,57 @@ create index if not exists posts_author_id_idx on public.posts (author_id);
 create index if not exists posts_category_id_idx on public.posts (category_id);
 create index if not exists posts_created_at_idx on public.posts (created_at desc);
 
+drop trigger if exists set_posts_updated_at on public.posts;
 create trigger set_posts_updated_at
 before update on public.posts
 for each row execute procedure public.set_updated_at();
 
 alter table public.posts enable row level security;
 
-create policy "posts are viewable by everyone"
-on public.posts
-for select
-to public
-using (true);
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='posts' and policyname='posts are viewable by everyone'
+  ) then
+    create policy "posts are viewable by everyone"
+    on public.posts
+    for select
+    to public
+    using (true);
+  end if;
 
-create policy "users can create their own posts"
-on public.posts
-for insert
-to authenticated
-with check (auth.uid() = author_id);
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='posts' and policyname='users can create their own posts'
+  ) then
+    create policy "users can create their own posts"
+    on public.posts
+    for insert
+    to authenticated
+    with check (auth.uid() = author_id);
+  end if;
 
-create policy "users can update their own posts"
-on public.posts
-for update
-to authenticated
-using (auth.uid() = author_id)
-with check (auth.uid() = author_id);
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='posts' and policyname='users can update their own posts'
+  ) then
+    create policy "users can update their own posts"
+    on public.posts
+    for update
+    to authenticated
+    using (auth.uid() = author_id)
+    with check (auth.uid() = author_id);
+  end if;
 
-create policy "users can delete their own posts"
-on public.posts
-for delete
-to authenticated
-using (auth.uid() = author_id);
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='posts' and policyname='users can delete their own posts'
+  ) then
+    create policy "users can delete their own posts"
+    on public.posts
+    for delete
+    to authenticated
+    using (auth.uid() = author_id);
+  end if;
+end
+$$;
 
 -- COMMENTS
 create table if not exists public.comments (
@@ -136,36 +182,57 @@ create index if not exists comments_post_id_idx on public.comments (post_id);
 create index if not exists comments_author_id_idx on public.comments (author_id);
 create index if not exists comments_created_at_idx on public.comments (created_at asc);
 
+drop trigger if exists set_comments_updated_at on public.comments;
 create trigger set_comments_updated_at
 before update on public.comments
 for each row execute procedure public.set_updated_at();
 
 alter table public.comments enable row level security;
 
-create policy "comments are viewable by everyone"
-on public.comments
-for select
-to public
-using (true);
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='comments' and policyname='comments are viewable by everyone'
+  ) then
+    create policy "comments are viewable by everyone"
+    on public.comments
+    for select
+    to public
+    using (true);
+  end if;
 
-create policy "users can create their own comments"
-on public.comments
-for insert
-to authenticated
-with check (auth.uid() = author_id);
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='comments' and policyname='users can create their own comments'
+  ) then
+    create policy "users can create their own comments"
+    on public.comments
+    for insert
+    to authenticated
+    with check (auth.uid() = author_id);
+  end if;
 
-create policy "users can update their own comments"
-on public.comments
-for update
-to authenticated
-using (auth.uid() = author_id)
-with check (auth.uid() = author_id);
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='comments' and policyname='users can update their own comments'
+  ) then
+    create policy "users can update their own comments"
+    on public.comments
+    for update
+    to authenticated
+    using (auth.uid() = author_id)
+    with check (auth.uid() = author_id);
+  end if;
 
-create policy "users can delete their own comments"
-on public.comments
-for delete
-to authenticated
-using (auth.uid() = author_id);
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='comments' and policyname='users can delete their own comments'
+  ) then
+    create policy "users can delete their own comments"
+    on public.comments
+    for delete
+    to authenticated
+    using (auth.uid() = author_id);
+  end if;
+end
+$$;
 
 -- REACTIONS (like/upvote/etc)
 do $$
@@ -208,32 +275,39 @@ where target = 'comment';
 
 alter table public.reactions enable row level security;
 
-create policy "reactions are viewable by everyone"
-on public.reactions
-for select
-to public
-using (true);
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='reactions' and policyname='reactions are viewable by everyone'
+  ) then
+    create policy "reactions are viewable by everyone"
+    on public.reactions
+    for select
+    to public
+    using (true);
+  end if;
 
-create policy "users can create their own reactions"
-on public.reactions
-for insert
-to authenticated
-with check (auth.uid() = user_id);
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='reactions' and policyname='users can create their own reactions'
+  ) then
+    create policy "users can create their own reactions"
+    on public.reactions
+    for insert
+    to authenticated
+    with check (auth.uid() = user_id);
+  end if;
 
-create policy "users can delete their own reactions"
-on public.reactions
-for delete
-to authenticated
-using (auth.uid() = user_id);
-
--- Default categories
-insert into public.categories (name, slug, description, sort_order)
-values
-  ('Vent', 'vent', 'A place to vent safely and be heard.', 10),
-  ('Advice', 'advice', 'Ask for or share supportive advice.', 20),
-  ('Wins', 'wins', 'Celebrate progress, big or small.', 30),
-  ('College Life', 'college-life', 'Mental health discussions for college life.', 40)
-on conflict (slug) do nothing;
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='reactions' and policyname='users can delete their own reactions'
+  ) then
+    create policy "users can delete their own reactions"
+    on public.reactions
+    for delete
+    to authenticated
+    using (auth.uid() = user_id);
+  end if;
+end
+$$;
 
 -- REPORTS (user-submitted moderation flags)
 create table if not exists public.reports (
@@ -257,21 +331,77 @@ create table if not exists public.reports (
 create index if not exists reports_status_idx on public.reports (status);
 create index if not exists reports_created_at_idx on public.reports (created_at desc);
 
+drop trigger if exists set_reports_updated_at on public.reports;
 create trigger set_reports_updated_at
 before update on public.reports
 for each row execute procedure public.set_updated_at();
 
 alter table public.reports enable row level security;
 
-create policy "authenticated users can view reports"
-on public.reports
-for select
-to authenticated
-using (true);
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='reports' and policyname='authenticated users can view reports'
+  ) then
+    create policy "authenticated users can view reports"
+    on public.reports
+    for select
+    to authenticated
+    using (true);
+  end if;
 
-create policy "authenticated users can insert own reports"
-on public.reports
-for insert
-to authenticated
-with check (auth.uid() = reporter_id);
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='reports' and policyname='authenticated users can insert own reports'
+  ) then
+    create policy "authenticated users can insert own reports"
+    on public.reports
+    for insert
+    to authenticated
+    with check (auth.uid() = reporter_id);
+  end if;
+end
+$$;
 
+-- FEEDBACK (user-submitted feedback; anon inserts allowed)
+create table if not exists public.feedback (
+  id uuid primary key default gen_random_uuid(),
+  name text,
+  message text not null,
+  page_path text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.feedback enable row level security;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='feedback' and policyname='feedback insert for all'
+  ) then
+    create policy "feedback insert for all"
+    on public.feedback
+    for insert
+    to anon, authenticated
+    with check (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='feedback' and policyname='feedback select for authenticated'
+  ) then
+    create policy "feedback select for authenticated"
+    on public.feedback
+    for select
+    to authenticated
+    using (true);
+  end if;
+end
+$$;
+
+-- Default categories
+insert into public.categories (name, slug, description, sort_order)
+values
+  ('Vent', 'vent', 'A place to vent safely and be heard.', 10),
+  ('Advice', 'advice', 'Ask for or share supportive advice.', 20),
+  ('Wins', 'wins', 'Celebrate progress, big or small.', 30),
+  ('College Life', 'college-life', 'Mental health discussions for college life.', 40)
+on conflict (slug) do nothing;
