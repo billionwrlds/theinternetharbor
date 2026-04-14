@@ -18,17 +18,9 @@ export function Header() {
 
   return (
     <header className="border-b border-border bg-background sticky top-0 z-50">
-      <div className="bg-primary text-primary-foreground">
-        <div className="max-w-7xl mx-auto px-4 py-1.5">
-          <p className="text-[11px] tracking-wider">
-            Internet Harbor is in beta — you may encounter bugs and changes. Thanks for sailing with us early ⚓
-          </p>
-        </div>
-      </div>
-
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
         <Link href="/" className="text-foreground hover:text-primary transition-colors">
-          <span className="font-sans text-lg tracking-wide">The Internet Harbor</span>
+          <span className="font-heading text-lg tracking-wide">The Internet Harbor</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-8">
