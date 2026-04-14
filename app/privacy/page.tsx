@@ -74,7 +74,7 @@ export default function PrivacyPage() {
           <div className="terminal-window mb-8">
             <div className="p-6">
               <p className="text-foreground leading-relaxed">
-                At Safe Harbor, your privacy is our priority. This policy explains what information we collect, how we use it, and your rights regarding your data. We believe in transparency and want you to feel safe using our platform.
+                At The Internet Harbor, your privacy is our priority. This policy explains what information we collect, how we use it, and your rights regarding your data. We believe in transparency and want you to feel safe using our platform.
               </p>
             </div>
           </div>
@@ -106,8 +106,8 @@ export default function PrivacyPage() {
             <h2 className="font-heading text-xl text-foreground mb-4">Questions?</h2>
             <p className="text-sm text-muted-foreground">
               If you have any questions about this Privacy Policy, please contact us at{" "}
-              <a href="mailto:privacy@safeharbor.com" className="text-primary hover:text-primary/80">
-                privacy@safeharbor.com
+              <a href="mailto:privacy@theinternetharbor.example" className="text-primary hover:text-primary/80">
+                privacy@theinternetharbor.example
               </a>
             </p>
           </div>

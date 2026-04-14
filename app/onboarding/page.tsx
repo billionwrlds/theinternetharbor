@@ -181,7 +181,7 @@ export default function OnboardingPage() {
 
             <div className="p-8">
               <div className="text-center mb-8">
-                <h1 className="font-heading text-3xl text-foreground mb-2">Welcome to Safe Harbor</h1>
+                <h1 className="font-heading text-3xl text-foreground mb-2">Welcome to The Internet Harbor</h1>
                 <p className="text-sm text-muted-foreground">
                   Let&apos;s set up your profile. Don&apos;t worry, you can always change this later.
                 </p>

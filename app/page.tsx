@@ -8,6 +8,7 @@ import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { MessageSquare, FileText, Heart } from "lucide-react"
 import { createClient } from "@/lib/supabase"
+import { PixelCornerCluster, PixelFrameAccent } from "@/components/pixel-decorations"
 
 const cardIcons = [MessageSquare, FileText, Heart] as const
 
@@ -23,6 +24,7 @@ type HomePost = {
 export default function HomePage() {
   const [recentPosts, setRecentPosts] = useState<HomePost[]>([])
   const [memberCount, setMemberCount] = useState<number | null>(null)
+  const [loggedIn, setLoggedIn] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -46,6 +48,19 @@ export default function HomePage() {
     return () => {
       cancelled = true
     }
+  }, [])
+
+  useEffect(() => {
+    const supabase = createClient()
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      setLoggedIn(!!session)
+    })
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setLoggedIn(!!session)
+    })
+    return () => subscription.unsubscribe()
   }, [])
 
   const authorLabel = (post: HomePost) => {
@@ -89,38 +104,59 @@ export default function HomePage() {
       <Header />
 
       <section className="relative h-[500px] md:h-[550px] flex items-center justify-center overflow-hidden">
-        <Image
-          src="/images/harbor-hero.jpg"
-          alt="Peaceful harbor at dusk"
-          fill
-          className="object-cover"
-          priority
-        />
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute inset-0 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[110%] h-[110%] min-w-full min-h-full pixel-media">
+            <Image
+              src="/images/harbor-hero.jpg"
+              alt="Harbor at dusk"
+              fill
+              className="object-cover contrast-[1.08] brightness-[1.02]"
+              priority
+              sizes="100vw"
+            />
+          </div>
+        </div>
         <div className="absolute inset-0 bg-gradient-to-b from-background/30 via-transparent to-background" />
+
+        <PixelFrameAccent className="absolute top-6 left-4 z-[2] hidden sm:block opacity-60" />
+        <PixelFrameAccent className="absolute bottom-20 right-4 z-[2] hidden sm:block opacity-60 rotate-180" />
+        <PixelCornerCluster className="absolute top-24 right-8 z-[2] hidden md:flex flex-col gap-1" />
 
         <div className="relative z-10 text-center px-4">
           <h1 className="font-heading text-4xl md:text-6xl lg:text-7xl text-foreground mb-2">A Safe Space</h1>
           <p className="font-heading text-3xl md:text-5xl lg:text-6xl text-primary italic">for Your Mind</p>
 
           <div className="flex items-center justify-center gap-4 mt-10">
-            <Link
-              href="/signup"
-              className="retro-btn px-8 py-3 text-sm tracking-widest flex items-center gap-2"
-            >
-              Join
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M7 17L17 7M17 7H7M17 7V17" />
-              </svg>
-            </Link>
-            <Link href="/login" className="retro-btn-outline px-8 py-3 text-sm tracking-widest">
-              Login
-            </Link>
+            {loggedIn ? (
+              <Link href="/forums" className="retro-btn px-8 py-3 text-sm tracking-widest flex items-center gap-2">
+                Go to Forums
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M7 17L17 7M17 7H7M17 7V17" />
+                </svg>
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/signup"
+                  className="retro-btn px-8 py-3 text-sm tracking-widest flex items-center gap-2"
+                >
+                  Join
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M7 17L17 7M17 7H7M17 7V17" />
+                  </svg>
+                </Link>
+                <Link href="/login" className="retro-btn-outline px-8 py-3 text-sm tracking-widest">
+                  Login
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </section>
 
-      <section className="flex-1 bg-background py-12 md:py-16">
-        <div className="max-w-7xl mx-auto px-4">
+      <section className="flex-1 bg-background py-12 md:py-16 relative">
+        <PixelCornerCluster className="absolute left-4 top-8 hidden lg:flex flex-col gap-1" />
+        <div className="max-w-7xl mx-auto px-4 relative">
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-3">
               <span className="w-2 h-2 bg-primary" />
@@ -136,10 +172,13 @@ export default function HomePage() {
 
           <div className="grid md:grid-cols-3 gap-4">
             {displayCards.map((post) => (
-              <article key={post.key} className="terminal-window p-0">
+              <article key={post.key} className="terminal-window p-0 relative overflow-hidden">
+                <div className="absolute top-2 right-2 opacity-40 pointer-events-none hidden sm:block">
+                  <PixelCornerCluster className="flex-col gap-0.5" />
+                </div>
                 <div className="terminal-header">
                   <span className="text-xs text-muted-foreground">{post.time || "—"}</span>
-                  <post.icon className="w-4 h-4 text-muted-foreground" />
+                  <post.icon className="w-4 h-4 text-muted-foreground" strokeWidth={2} />
                 </div>
                 <div className="p-5">
                   <p className="font-serif text-sm text-foreground leading-relaxed mb-6">{post.content}</p>
@@ -159,8 +198,11 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="bg-secondary border-y border-border py-6">
-        <div className="max-w-7xl mx-auto px-4">
+      <section className="bg-secondary border-y border-border py-6 relative overflow-hidden">
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-[0.07] pointer-events-none">
+          <PixelFrameAccent className="w-32 h-32 text-primary" />
+        </div>
+        <div className="max-w-7xl mx-auto px-4 relative">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <span className="status-dot" />

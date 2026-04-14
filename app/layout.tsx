@@ -1,11 +1,12 @@
 import type { Metadata } from 'next'
-import { Pixelify_Sans, Courier_Prime, Share_Tech_Mono } from 'next/font/google'
+import localFont from 'next/font/local'
+import { Courier_Prime, Share_Tech_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 
-const pixelifySans = Pixelify_Sans({ 
-  subsets: ['latin'],
-  variable: '--font-heading',
+const headingFont = localFont({
+  src: '../public/fonts/ThePixelateforAr.woff2',
+  variable: '--font-heading-loaded',
   display: 'swap',
 })
 
@@ -24,9 +25,24 @@ const shareTechMono = Share_Tech_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Internet Harbor - A Safe Harbor for the Weary',
+  title: {
+    default: 'The Internet Harbor',
+    template: '%s | The Internet Harbor',
+  },
   description: 'A mental health forum for quiet reflection. Submerged data terminal for those seeking stillness in the digital undertow.',
   generator: 'v0.app',
+  applicationName: 'The Internet Harbor',
+  openGraph: {
+    title: 'The Internet Harbor',
+    description: 'A mental health forum for quiet reflection — peer support, resources, and community.',
+    siteName: 'The Internet Harbor',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'The Internet Harbor',
+    description: 'A mental health forum for quiet reflection — peer support, resources, and community.',
+  },
   icons: {
     icon: [
       {
@@ -52,8 +68,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${pixelifySans.variable} ${courierPrime.variable} ${shareTechMono.variable} bg-background`}>
-      <body className="font-sans antialiased min-h-screen">
+    <html lang="en" className={`${headingFont.variable} ${courierPrime.variable} ${shareTechMono.variable} bg-background`}>
+      <body className="font-serif antialiased min-h-screen">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

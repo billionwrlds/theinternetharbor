@@ -34,7 +34,7 @@ export function NotificationDropdown() {
         onClick={() => setIsOpen(!isOpen)}
         className="relative w-8 h-8 border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary transition-colors"
       >
-        <Bell className="w-5 h-5" />
+        <Bell className="w-5 h-5" strokeWidth={2} />
         {unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-background text-[10px] flex items-center justify-center">
             {unreadCount}
@@ -67,7 +67,7 @@ export function NotificationDropdown() {
             <div className="max-h-80 overflow-y-auto">
               {notifications.length === 0 ? (
                 <div className="p-6 text-center">
-                  <Bell className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                  <Bell className="w-8 h-8 text-muted-foreground mx-auto mb-2" strokeWidth={2} />
                   <p className="text-sm text-muted-foreground">No notifications yet</p>
                 </div>
               ) : (
@@ -81,9 +81,9 @@ export function NotificationDropdown() {
                     >
                       <div className="w-8 h-8 bg-secondary border border-border shrink-0 flex items-center justify-center">
                         {notification.type === "reply" ? (
-                          <MessageSquare className="w-4 h-4 text-primary" />
+                          <MessageSquare className="w-4 h-4 text-primary" strokeWidth={2} />
                         ) : (
-                          <Heart className="w-4 h-4 text-primary" />
+                          <Heart className="w-4 h-4 text-primary" strokeWidth={2} />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -103,7 +103,7 @@ export function NotificationDropdown() {
                         onClick={() => clearNotification(notification.id)}
                         className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
                       >
-                        <X className="w-4 h-4" />
+                        <X className="w-4 h-4" strokeWidth={2} />
                       </button>
                     </div>
                   ))}

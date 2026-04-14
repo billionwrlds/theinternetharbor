@@ -5,7 +5,7 @@ import { Footer } from "@/components/footer"
 const sections = [
   {
     title: "Acceptance of Terms",
-    content: "By accessing or using Safe Harbor, you agree to be bound by these Terms of Service and all applicable laws and regulations. If you do not agree with any of these terms, you are prohibited from using or accessing this site.",
+    content: "By accessing or using The Internet Harbor, you agree to be bound by these Terms of Service and all applicable laws and regulations. If you do not agree with any of these terms, you are prohibited from using or accessing this site.",
   },
   {
     title: "User Accounts",
@@ -13,7 +13,7 @@ const sections = [
   },
   {
     title: "User Content",
-    content: "You retain ownership of content you post on Safe Harbor. By posting content, you grant us a non-exclusive license to display, distribute, and use your content in connection with the service. You are solely responsible for your content and must ensure it does not violate any laws or third-party rights. We reserve the right to remove content that violates our Community Guidelines.",
+    content: "You retain ownership of content you post on The Internet Harbor. By posting content, you grant us a non-exclusive license to display, distribute, and use your content in connection with the service. You are solely responsible for your content and must ensure it does not violate any laws or third-party rights. We reserve the right to remove content that violates our Community Guidelines.",
   },
   {
     title: "Prohibited Conduct",
@@ -21,19 +21,19 @@ const sections = [
   },
   {
     title: "Health Disclaimer",
-    content: "Safe Harbor is a peer support community and is not a substitute for professional mental health care. Content on this platform should not be considered medical or psychological advice. If you are experiencing a mental health emergency, please contact emergency services or a crisis hotline immediately. We encourage all users to seek appropriate professional help when needed.",
+    content: "The Internet Harbor is a peer support community and is not a substitute for professional mental health care. Content on this platform should not be considered medical or psychological advice. If you are experiencing a mental health emergency, please contact emergency services or a crisis hotline immediately. We encourage all users to seek appropriate professional help when needed.",
   },
   {
     title: "Privacy",
-    content: "Your use of Safe Harbor is also governed by our Privacy Policy. By using our service, you consent to the collection and use of your information as described in that policy.",
+    content: "Your use of The Internet Harbor is also governed by our Privacy Policy. By using our service, you consent to the collection and use of your information as described in that policy.",
   },
   {
     title: "Intellectual Property",
-    content: "The Safe Harbor name, logo, and all related trademarks are our property. The service and its original content (excluding user content) are protected by copyright and other intellectual property laws. You may not reproduce, distribute, or create derivative works without our express permission.",
+    content: "The Internet Harbor name, logo, and all related trademarks are our property. The service and its original content (excluding user content) are protected by copyright and other intellectual property laws. You may not reproduce, distribute, or create derivative works without our express permission.",
   },
   {
     title: "Limitation of Liability",
-    content: "Safe Harbor is provided \"as is\" without warranties of any kind. We are not liable for any damages arising from your use of the service, including but not limited to direct, indirect, incidental, or consequential damages. We do not guarantee the accuracy, completeness, or usefulness of any content on the platform.",
+    content: "The Internet Harbor is provided \"as is\" without warranties of any kind. We are not liable for any damages arising from your use of the service, including but not limited to direct, indirect, incidental, or consequential damages. We do not guarantee the accuracy, completeness, or usefulness of any content on the platform.",
   },
   {
     title: "Changes to Terms",
@@ -88,8 +88,8 @@ export default function TermsPage() {
             <h2 className="font-heading text-xl text-foreground mb-4">Questions?</h2>
             <p className="text-sm text-muted-foreground">
               If you have any questions about these Terms, please contact us at{" "}
-              <a href="mailto:legal@safeharbor.com" className="text-primary hover:text-primary/80">
-                legal@safeharbor.com
+              <a href="mailto:legal@theinternetharbor.example" className="text-primary hover:text-primary/80">
+                legal@theinternetharbor.example
               </a>
             </p>
           </div>

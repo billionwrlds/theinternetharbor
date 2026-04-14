@@ -5,13 +5,13 @@ export function Footer() {
     <footer className="border-t border-border bg-background py-6">
       <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-          <span className="font-heading text-sm text-foreground">Safe Harbor</span>
+          <span className="font-heading text-sm text-foreground">The Internet Harbor</span>
           <span className="text-muted-foreground text-xs hidden sm:inline">
-            &copy; 2024 Safe Harbor. All rights reserved.
+            &copy; 2026 The Internet Harbor. All rights reserved.
           </span>
         </div>
         <span className="text-muted-foreground text-xs sm:hidden">
-          &copy; 2024 Safe Harbor. All rights reserved.
+          &copy; 2026 The Internet Harbor. All rights reserved.
         </span>
         <nav className="flex items-center gap-6">
           <Link

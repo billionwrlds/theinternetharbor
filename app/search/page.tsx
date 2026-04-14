@@ -6,7 +6,7 @@ import { Suspense, useEffect, useState } from "react"
 import { formatDistanceToNow } from "date-fns"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
-import { Search, MessageSquare, Filter } from "lucide-react"
+import { Search, MessageSquare, Filter, Heart } from "lucide-react"
 import { createClient } from "@/lib/supabase"
 
 type Result = {
@@ -82,7 +82,7 @@ function SearchPageContent() {
             <div className="terminal-window">
               <div className="p-4 flex flex-col sm:flex-row gap-4">
                 <form className="flex-1 flex items-center gap-2 bg-secondary border border-border px-3 py-2" action="/search" method="get">
-                  <Search className="w-4 h-4 text-muted-foreground" />
+                  <Search className="w-4 h-4 text-muted-foreground" strokeWidth={2} />
                   <input
                     type="text"
                     name="q"
@@ -92,7 +92,7 @@ function SearchPageContent() {
                   />
                 </form>
                 <button type="button" className="retro-btn-outline px-4 py-2 text-xs tracking-widest flex items-center gap-2">
-                  <Filter className="w-4 h-4" />
+                  <Filter className="w-4 h-4" strokeWidth={2} />
                   Filters
                 </button>
               </div>
@@ -160,13 +160,11 @@ function SearchPageContent() {
 
                         <div className="flex items-center gap-4">
                           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <MessageSquare className="w-4 h-4" />
+                            <MessageSquare className="w-4 h-4" strokeWidth={2} />
                             {commentsCount} replies
                           </span>
                           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                            </svg>
+                            <Heart className="w-4 h-4" strokeWidth={2} />
                             {likesCount} likes
                           </span>
                         </div>
@@ -178,7 +176,7 @@ function SearchPageContent() {
           ) : (
             <div className="terminal-window">
               <div className="p-12 text-center">
-                <Search className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <Search className="w-12 h-12 text-muted-foreground mx-auto mb-4" strokeWidth={2} />
                 <h2 className="font-heading text-xl text-foreground mb-2">Start Searching</h2>
                 <p className="text-sm text-muted-foreground">Enter a search term above to find posts, topics, or users.</p>
               </div>

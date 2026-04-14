@@ -81,7 +81,7 @@ export default function SignupPage() {
             <div className="p-8">
               {/* Title */}
               <div className="text-center mb-8">
-                <h1 className="font-heading text-3xl text-foreground mb-2">Join Safe Harbor</h1>
+                <h1 className="font-heading text-3xl text-foreground mb-2">Join The Internet Harbor</h1>
                 <p className="text-xs text-primary tracking-widest">Create your account</p>
               </div>
 

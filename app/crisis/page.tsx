@@ -151,7 +151,7 @@ export default function CrisisPage() {
               <div>
                 <h2 className="font-heading text-xl text-foreground mb-2">You Matter</h2>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  Whatever you&apos;re going through, your feelings are valid and there is help available. Reaching out takes courage, and it&apos;s the first step toward feeling better. The Safe Harbor community is here to support you, but please also consider speaking with a professional who can provide personalized care.
+                  Whatever you&apos;re going through, your feelings are valid and there is help available. Reaching out takes courage, and it&apos;s the first step toward feeling better. The Internet Harbor community is here to support you, but please also consider speaking with a professional who can provide personalized care.
                 </p>
               </div>
             </div>

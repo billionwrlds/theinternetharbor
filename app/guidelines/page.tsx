@@ -47,7 +47,7 @@ export default function GuidelinesPage() {
           <div className="text-center mb-12">
             <h1 className="font-heading text-4xl md:text-5xl text-foreground mb-4">Community Guidelines</h1>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              Safe Harbor is built on mutual respect and support. These guidelines help us maintain a safe, welcoming space for everyone.
+              The Internet Harbor is built on mutual respect and support. These guidelines help us maintain a safe, welcoming space for everyone.
             </p>
           </div>
 
@@ -80,8 +80,8 @@ export default function GuidelinesPage() {
               </p>
               <p className="text-sm text-muted-foreground">
                 For urgent safety concerns, please contact us directly at{" "}
-                <a href="mailto:safety@safeharbor.com" className="text-primary hover:text-primary/80">
-                  safety@safeharbor.com
+                <a href="mailto:safety@theinternetharbor.example" className="text-primary hover:text-primary/80">
+                  safety@theinternetharbor.example
                 </a>
               </p>
             </div>

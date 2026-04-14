@@ -6,9 +6,11 @@ import { useCallback, useEffect, useState } from "react"
 import { format } from "date-fns"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
-import { ChevronUp, Reply, MoreHorizontal, Plus, Flag } from "lucide-react"
+import { Reply, MoreHorizontal, Plus, Flag } from "lucide-react"
 import { createClient } from "@/lib/supabase"
 import { ensureProfileExists } from "@/lib/profile"
+import { ReactionButton } from "@/components/reaction-button"
+import { ReportModal } from "@/components/report-modal"
 
 type PostRow = {
   id: string
@@ -27,10 +29,11 @@ type CommentRow = {
   profiles: { username: string | null; display_name: string | null } | { username: string | null; display_name: string | null }[] | null
 }
 
-async function loadReactionCounts(
+async function loadReactionAggregates(
   supabase: ReturnType<typeof createClient>,
   postId: string,
-  commentIds: string[]
+  commentIds: string[],
+  userId: string | undefined
 ) {
   const { count: postLikes } = await supabase
     .from("reactions")
@@ -53,7 +56,31 @@ async function loadReactionCounts(
     }
   }
 
-  return { postLikes: postLikes ?? 0, commentCounts }
+  let postLiked = false
+  const commentLiked: Record<string, boolean> = {}
+  if (userId) {
+    const { data: pr } = await supabase
+      .from("reactions")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("post_id", postId)
+      .eq("target", "post")
+      .maybeSingle()
+    postLiked = !!pr
+    if (commentIds.length > 0) {
+      const { data: crs } = await supabase
+        .from("reactions")
+        .select("comment_id")
+        .eq("user_id", userId)
+        .eq("target", "comment")
+        .in("comment_id", commentIds)
+      for (const row of crs ?? []) {
+        if (row.comment_id) commentLiked[row.comment_id] = true
+      }
+    }
+  }
+
+  return { postLikes: postLikes ?? 0, commentCounts, postLiked, commentLiked }
 }
 
 export default function ThreadPage() {
@@ -63,13 +90,18 @@ export default function ThreadPage() {
   const [post, setPost] = useState<PostRow | null>(null)
   const [comments, setComments] = useState<CommentRow[]>([])
   const [postLikeCount, setPostLikeCount] = useState(0)
+  const [postLiked, setPostLiked] = useState(false)
   const [commentLikeCounts, setCommentLikeCounts] = useState<Record<string, number>>({})
+  const [commentLiked, setCommentLiked] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [replyBody, setReplyBody] = useState("")
   const [replyBusy, setReplyBusy] = useState(false)
   const [replyError, setReplyError] = useState<string | null>(null)
   const [hasSession, setHasSession] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportType, setReportType] = useState<"post" | "comment">("post")
+  const [reportItemId, setReportItemId] = useState("")
 
   const loadThread = useCallback(async () => {
     if (!id) {
@@ -85,6 +117,7 @@ export default function ThreadPage() {
     const {
       data: { user },
     } = await supabase.auth.getUser()
+    const userId = user?.id
     setHasSession(!!user)
 
     const { data: postData, error: postError } = await supabase
@@ -122,9 +155,11 @@ export default function ThreadPage() {
       const list = (commentsData ?? []) as CommentRow[]
       setComments(list)
       const cids = list.map((c) => c.id)
-      const counts = await loadReactionCounts(supabase, id, cids)
-      setPostLikeCount(counts.postLikes)
-      setCommentLikeCounts(counts.commentCounts)
+      const agg = await loadReactionAggregates(supabase, id, cids, userId)
+      setPostLikeCount(agg.postLikes)
+      setPostLiked(agg.postLiked)
+      setCommentLikeCounts(agg.commentCounts)
+      setCommentLiked(agg.commentLiked)
     }
 
     setLoading(false)
@@ -251,27 +286,35 @@ export default function ThreadPage() {
                         </div>
                       </div>
                       <div className="hidden md:flex flex-col gap-2 mt-6">
+                        <ReactionButton
+                          target="post"
+                          postId={post.id}
+                          count={postLikeCount}
+                          liked={postLiked}
+                          allowInteract={hasSession}
+                          label="Support"
+                          onUpdated={(c, l) => {
+                            setPostLikeCount(c)
+                            setPostLiked(l)
+                          }}
+                        />
                         <button
                           type="button"
                           className="retro-btn-outline px-4 py-2.5 text-xs tracking-wider flex items-center justify-center gap-2"
                         >
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                          </svg>
-                          Support ({postLikeCount})
-                        </button>
-                        <button
-                          type="button"
-                          className="retro-btn-outline px-4 py-2.5 text-xs tracking-wider flex items-center justify-center gap-2"
-                        >
-                          <Reply className="w-4 h-4" />
+                          <Reply className="w-4 h-4" strokeWidth={2} />
                           Reply
                         </button>
                         <button
                           type="button"
+                          onClick={() => {
+                            setReportType("post")
+                            setReportItemId(post.id)
+                            setReportOpen(true)
+                          }}
                           className="retro-btn-outline px-4 py-2.5 text-xs tracking-wider flex items-center justify-center gap-2 text-muted-foreground"
                         >
-                          <Flag className="w-4 h-4" />
+                          <Flag className="w-4 h-4" strokeWidth={2} />
                           Report
                         </button>
                       </div>
@@ -286,22 +329,38 @@ export default function ThreadPage() {
                         ))}
                       </div>
 
-                      <div className="flex md:hidden gap-2 mt-6">
+                      <div className="flex md:hidden flex-wrap gap-2 mt-6">
+                        <ReactionButton
+                          target="post"
+                          postId={post.id}
+                          count={postLikeCount}
+                          liked={postLiked}
+                          allowInteract={hasSession}
+                          label="Support"
+                          className="flex-1 min-w-[40%]"
+                          onUpdated={(c, l) => {
+                            setPostLikeCount(c)
+                            setPostLiked(l)
+                          }}
+                        />
                         <button
                           type="button"
-                          className="retro-btn-outline flex-1 px-4 py-2.5 text-xs tracking-wider flex items-center justify-center gap-2"
+                          className="retro-btn-outline flex-1 min-w-[40%] px-4 py-2.5 text-xs tracking-wider flex items-center justify-center gap-2"
                         >
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                          </svg>
-                          Support ({postLikeCount})
+                          <Reply className="w-4 h-4" strokeWidth={2} />
+                          Reply
                         </button>
                         <button
                           type="button"
-                          className="retro-btn-outline flex-1 px-4 py-2.5 text-xs tracking-wider flex items-center justify-center gap-2"
+                          onClick={() => {
+                            setReportType("post")
+                            setReportItemId(post.id)
+                            setReportOpen(true)
+                          }}
+                          className="retro-btn-outline w-full px-4 py-2.5 text-xs tracking-wider flex items-center justify-center gap-2 text-muted-foreground"
                         >
-                          <Reply className="w-4 h-4" />
-                          Reply
+                          <Flag className="w-4 h-4" strokeWidth={2} />
+                          Report post
                         </button>
                       </div>
                     </div>
@@ -372,26 +431,45 @@ export default function ThreadPage() {
                           </div>
                         </div>
                         <button type="button" className="text-muted-foreground hover:text-foreground transition-colors">
-                          <MoreHorizontal className="w-5 h-5" />
+                          <MoreHorizontal className="w-5 h-5" strokeWidth={2} />
                         </button>
                       </div>
 
                       <p className="font-serif text-foreground leading-relaxed mb-4 whitespace-pre-wrap">{comment.body}</p>
 
-                      <div className="flex items-center gap-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <ReactionButton
+                          target="comment"
+                          postId={post.id}
+                          commentId={comment.id}
+                          count={commentLikeCounts[comment.id] ?? 0}
+                          liked={commentLiked[comment.id] ?? false}
+                          allowInteract={hasSession}
+                          label="Like"
+                          className="retro-btn-outline px-3 py-2"
+                          onUpdated={(c, l) => {
+                            setCommentLikeCounts((prev) => ({ ...prev, [comment.id]: c }))
+                            setCommentLiked((prev) => ({ ...prev, [comment.id]: l }))
+                          }}
+                        />
                         <button
                           type="button"
-                          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+                          className="retro-btn-outline px-3 py-2 text-xs tracking-wider flex items-center justify-center gap-2"
                         >
-                          <ChevronUp className="w-4 h-4" />
-                          Like ({commentLikeCounts[comment.id] ?? 0})
+                          <Reply className="w-4 h-4" strokeWidth={2} />
+                          Reply
                         </button>
                         <button
                           type="button"
-                          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+                          onClick={() => {
+                            setReportType("comment")
+                            setReportItemId(comment.id)
+                            setReportOpen(true)
+                          }}
+                          className="retro-btn-outline px-3 py-2 text-xs tracking-wider flex items-center justify-center gap-2 text-muted-foreground"
                         >
-                          <Reply className="w-4 h-4" />
-                          Reply
+                          <Flag className="w-4 h-4" strokeWidth={2} />
+                          Report
                         </button>
                       </div>
                     </div>
@@ -404,10 +482,18 @@ export default function ThreadPage() {
       </main>
 
       <Link href="/forums/create" className="fixed bottom-6 right-6 w-14 h-14 retro-btn flex items-center justify-center">
-        <Plus className="w-6 h-6" />
+        <Plus className="w-6 h-6" strokeWidth={2} />
       </Link>
 
       <Footer />
+
+      <ReportModal
+        key={`${reportType}-${reportItemId}`}
+        isOpen={reportOpen}
+        onClose={() => setReportOpen(false)}
+        type={reportType}
+        itemId={reportItemId}
+      />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { X, AlertTriangle } from "lucide-react"
 import { createClient } from "@/lib/supabase"
 import { ensureProfileExists } from "@/lib/profile"
@@ -19,6 +19,16 @@ export function ReportModal({ isOpen, onClose, type, itemId }: ReportModalProps)
   const [submitted, setSubmitted] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedReason("")
+      setDetails("")
+      setSubmitted(false)
+      setSubmitError(null)
+      setSubmitting(false)
+    }
+  }, [isOpen, itemId, type])
 
   if (!isOpen) return null
 
@@ -89,7 +99,7 @@ export function ReportModal({ isOpen, onClose, type, itemId }: ReportModalProps)
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-background/80 backdrop-blur-sm" 

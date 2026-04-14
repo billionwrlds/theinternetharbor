@@ -22,7 +22,7 @@ export default function MaintenancePage() {
               {/* Message */}
               <h1 className="font-heading text-3xl text-foreground mb-2">We&apos;ll Be Right Back</h1>
               <p className="text-sm text-muted-foreground mb-8">
-                Safe Harbor is currently undergoing scheduled maintenance to improve your experience. We apologize for any inconvenience.
+                The Internet Harbor is currently undergoing scheduled maintenance to improve your experience. We apologize for any inconvenience.
               </p>
 
               {/* Estimated Time */}
