@@ -481,7 +481,7 @@ export default function ThreadPage() {
         </div>
       </main>
 
-      <Link href="/forums/create" className="fixed bottom-6 right-6 w-14 h-14 retro-btn flex items-center justify-center">
+      <Link href="/forums/create" className="fixed bottom-24 right-6 w-14 h-14 retro-btn flex items-center justify-center">
         <Plus className="w-6 h-6" strokeWidth={2} />
       </Link>
 

@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import localFont from 'next/font/local'
 import { Courier_Prime, Share_Tech_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { FeedbackWidget } from '@/components/feedback-widget'
 import './globals.css'
 
 const headingFont = localFont({
@@ -71,6 +72,7 @@ export default function RootLayout({
     <html lang="en" className={`${headingFont.variable} ${courierPrime.variable} ${shareTechMono.variable} bg-background`}>
       <body className="font-serif antialiased min-h-screen">
         {children}
+        <FeedbackWidget />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
