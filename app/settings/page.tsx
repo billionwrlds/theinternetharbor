@@ -1,19 +1,44 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { ArrowLeft, Mail, Lock, Bell, Shield, Trash2, Save } from "lucide-react"
+import { createClient } from "@/lib/supabase"
 
 export default function SettingsPage() {
-  const [email, setEmail] = useState("user@example.com")
+  const router = useRouter()
+  const [email, setEmail] = useState("")
   const [notifications, setNotifications] = useState({
     replies: true,
     likes: false,
     mentions: true,
     digest: true,
   })
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function load() {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (cancelled) return
+      if (!user) {
+        router.replace("/login")
+        return
+      }
+      if (user.email) setEmail(user.email)
+    }
+
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [router])
 
   return (
     <div className="min-h-screen flex flex-col">

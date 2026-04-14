@@ -1,7 +1,13 @@
+"use client"
+
 import Link from "next/link"
+import { useParams } from "next/navigation"
+import { useEffect, useState } from "react"
+import { formatDistanceToNow } from "date-fns"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { MessageSquare, Share2, ArrowLeft } from "lucide-react"
+import { createClient } from "@/lib/supabase"
 
 const categoryInfo: Record<string, { title: string; description: string; color: string }> = {
   vent: {
@@ -11,7 +17,7 @@ const categoryInfo: Record<string, { title: string; description: string; color: 
   },
   advice: {
     title: "Advice",
-    description: "Seeking or offering guidance for life&apos;s challenges.",
+    description: "Seeking or offering guidance for life's challenges.",
     color: "bg-blue-500/20 border-blue-500/50",
   },
   wins: {
@@ -19,51 +25,101 @@ const categoryInfo: Record<string, { title: string; description: string; color: 
     description: "Celebrate your victories, big or small.",
     color: "bg-green-500/20 border-green-500/50",
   },
+  "college-life": {
+    title: "College Life",
+    description: "Navigating the unique challenges of student life.",
+    color: "bg-purple-500/20 border-border",
+  },
   college: {
     title: "College Life",
     description: "Navigating the unique challenges of student life.",
-    color: "bg-purple-500/20 border-purple-500/50",
+    color: "bg-purple-500/20 border-border",
   },
 }
 
-const threads = [
-  {
-    id: "8829-X",
-    title: "Finding peace during exam season",
-    posted: "2 hours ago",
-    excerpt: "The library is finally empty at 3 AM. Does anyone else find the silence of these large halls more comforting than their actual room?",
-    comments: 24,
-    likes: 156,
-  },
-  {
-    id: "4412-Z",
-    title: "Small Win: Finished my project a week early",
-    posted: "5 hours ago",
-    excerpt: "Finally broke the cycle of procrastination. It feels like I can breathe again.",
-    comments: 12,
-    likes: 89,
-  },
-  {
-    id: "1092-B",
-    title: "Does anyone else feel overwhelmed lately?",
-    posted: "8 hours ago",
-    excerpt: "Just a general vent about the weight of expectations. It feels like everyone else has it figured out except me.",
-    comments: 45,
-    likes: 312,
-  },
-]
+type PostRow = {
+  id: string
+  title: string
+  body: string
+  created_at: string | null
+  comments: { count: number }[] | null
+  reactions: { count: number }[] | null
+}
 
-export default async function CategoryPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params
-  const category = categoryInfo[slug] || { title: "Category", description: "Browse posts in this category.", color: "bg-secondary border-border" }
+export default function CategoryPage() {
+  const params = useParams()
+  const slug = typeof params?.slug === "string" ? params.slug : ""
+
+  const [posts, setPosts] = useState<PostRow[]>([])
+  const [memberCount, setMemberCount] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const category =
+    categoryInfo[slug] || { title: "Category", description: "Browse posts in this category.", color: "bg-secondary border-border" }
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function load() {
+      if (!slug) {
+        setError("Invalid category.")
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      setError(null)
+      const supabase = createClient()
+
+      const { data: catRow, error: catError } = await supabase
+        .from("categories")
+        .select("id")
+        .eq("slug", slug)
+        .maybeSingle()
+
+      if (cancelled) return
+
+      if (catError || !catRow) {
+        setError(catError?.message ?? "Category not found.")
+        setPosts([])
+        setLoading(false)
+        return
+      }
+
+      const [{ data: postsData, error: postsError }, { count }] = await Promise.all([
+        supabase
+          .from("posts")
+          .select("id,title,body,created_at,comments(count),reactions(count)")
+          .eq("category_id", catRow.id)
+          .order("created_at", { ascending: false }),
+        supabase.from("profiles").select("*", { count: "exact", head: true }),
+      ])
+
+      if (cancelled) return
+
+      if (postsError) {
+        setError(postsError.message)
+        setPosts([])
+      } else {
+        setPosts((postsData ?? []) as PostRow[])
+      }
+      setMemberCount(count ?? 0)
+      setLoading(false)
+    }
+
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [slug])
 
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      
+
       <main className="flex-1 bg-background">
         <div className="max-w-5xl mx-auto px-4 py-8">
-          {/* Back Link */}
           <Link
             href="/forums"
             className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors mb-6"
@@ -72,71 +128,87 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
             Back to Forums
           </Link>
 
-          {/* Category Header */}
           <div className={`terminal-window mb-8 ${category.color}`}>
             <div className="p-6">
               <h1 className="font-heading text-3xl md:text-4xl text-foreground mb-2">{category.title}</h1>
               <p className="text-sm text-muted-foreground">{category.description}</p>
               <div className="flex items-center gap-4 mt-4">
-                <span className="text-xs text-muted-foreground">{threads.length} posts</span>
-                <span className="text-xs text-muted-foreground">1,204 members</span>
+                <span className="text-xs text-muted-foreground">{loading ? "…" : `${posts.length} posts`}</span>
+                <span className="text-xs text-muted-foreground">
+                  {memberCount !== null ? `${memberCount} members` : "—"}
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Thread List */}
+          {error && (
+            <p className="text-sm text-destructive mb-4">{error}</p>
+          )}
+
+          {loading && <p className="text-xs text-muted-foreground mb-4">Loading…</p>}
+
           <div className="space-y-4">
-            {threads.map((thread) => (
-              <article key={thread.id} className="terminal-window">
-                <div className="terminal-header">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 bg-primary" />
-                    <span className="text-xs text-muted-foreground">Post #{thread.id}</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">{thread.posted}</span>
-                </div>
-                <div className="p-5">
-                  <div className="flex gap-4">
-                    <div className="w-12 h-12 bg-secondary border border-border shrink-0 flex items-center justify-center">
-                      <span className="text-muted-foreground text-lg">?</span>
+            {!loading && posts.length === 0 && !error && (
+              <p className="text-sm text-muted-foreground">No posts in this category yet.</p>
+            )}
+            {posts.map((thread) => {
+              const posted = thread.created_at
+                ? formatDistanceToNow(new Date(thread.created_at), { addSuffix: true })
+                : ""
+              const excerpt =
+                thread.body.length > 220 ? `${thread.body.slice(0, 220).trim()}…` : thread.body
+              const commentsCount = Array.isArray(thread.comments) ? thread.comments[0]?.count ?? 0 : 0
+              const likesCount = Array.isArray(thread.reactions) ? thread.reactions[0]?.count ?? 0 : 0
+
+              return (
+                <article key={thread.id} className="terminal-window">
+                  <div className="terminal-header">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 bg-primary" />
+                      <span className="text-xs text-muted-foreground">Post #{String(thread.id).slice(0, 8)}</span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <Link 
-                        href={`/forums/thread/${thread.id}`}
-                        className="font-heading text-lg text-foreground hover:text-primary transition-colors block mb-2"
-                      >
-                        {thread.title}
-                      </Link>
-                      <p className="font-serif text-sm text-muted-foreground leading-relaxed mb-4">
-                        {thread.excerpt}
-                      </p>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <MessageSquare className="w-4 h-4" />
-                            {thread.comments}
-                          </span>
-                          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                            </svg>
-                            {thread.likes}
-                          </span>
+                    <span className="text-xs text-muted-foreground">{posted}</span>
+                  </div>
+                  <div className="p-5">
+                    <div className="flex gap-4">
+                      <div className="w-12 h-12 bg-secondary border border-border shrink-0 flex items-center justify-center">
+                        <span className="text-muted-foreground text-lg">?</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <Link
+                          href={`/forums/thread/${thread.id}`}
+                          className="font-heading text-lg text-foreground hover:text-primary transition-colors block mb-2"
+                        >
+                          {thread.title}
+                        </Link>
+                        <p className="font-serif text-sm text-muted-foreground leading-relaxed mb-4">{excerpt}</p>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <MessageSquare className="w-4 h-4" />
+                              {commentsCount}
+                            </span>
+                            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                              </svg>
+                              {likesCount}
+                            </span>
+                          </div>
+                          <button type="button" className="text-muted-foreground hover:text-foreground transition-colors">
+                            <Share2 className="w-4 h-4" />
+                          </button>
                         </div>
-                        <button className="text-muted-foreground hover:text-foreground transition-colors">
-                          <Share2 className="w-4 h-4" />
-                        </button>
                       </div>
                     </div>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              )
+            })}
           </div>
 
-          {/* Load More */}
           <div className="flex justify-center mt-8">
-            <button className="retro-btn-outline px-6 py-2.5 text-xs tracking-widest">
+            <button type="button" className="retro-btn-outline px-6 py-2.5 text-xs tracking-widest">
               Load More Posts
             </button>
           </div>

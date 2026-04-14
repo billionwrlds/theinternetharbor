@@ -2,6 +2,9 @@
 
 import { useState } from "react"
 import { X, AlertTriangle } from "lucide-react"
+import { createClient } from "@/lib/supabase"
+import { ensureProfileExists } from "@/lib/profile"
+import { REPORT_REASONS, priorityForReason } from "@/lib/report-reasons"
 
 interface ReportModalProps {
   isOpen: boolean
@@ -10,33 +13,79 @@ interface ReportModalProps {
   itemId: string
 }
 
-const reportReasons = [
-  { id: "spam", label: "Spam or misleading" },
-  { id: "harassment", label: "Harassment or bullying" },
-  { id: "harmful", label: "Harmful or dangerous content" },
-  { id: "personal", label: "Sharing personal information" },
-  { id: "inappropriate", label: "Inappropriate content" },
-  { id: "other", label: "Other" },
-]
-
 export function ReportModal({ isOpen, onClose, type, itemId }: ReportModalProps) {
   const [selectedReason, setSelectedReason] = useState("")
   const [details, setDetails] = useState("")
   const [submitted, setSubmitted] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
   if (!isOpen) return null
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // In a real app, this would submit to an API
-    console.log("Report submitted:", { type, itemId, reason: selectedReason, details })
-    setSubmitted(true)
-    setTimeout(() => {
-      setSubmitted(false)
-      setSelectedReason("")
-      setDetails("")
-      onClose()
-    }, 2000)
+    setSubmitError(null)
+    setSubmitting(true)
+
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser()
+
+      if (authError || !user) {
+        setSubmitError("You must be logged in to submit a report.")
+        setSubmitting(false)
+        return
+      }
+
+      await ensureProfileExists(user.id)
+
+      const priority = priorityForReason(selectedReason)
+
+      if (type === "post") {
+        const { error: insertError } = await supabase.from("reports").insert({
+          reporter_id: user.id,
+          target_type: "post",
+          post_id: itemId,
+          reason: selectedReason,
+          details: details.trim() || null,
+          priority,
+        })
+        if (insertError) {
+          setSubmitError(insertError.message)
+          setSubmitting(false)
+          return
+        }
+      } else {
+        const { error: insertError } = await supabase.from("reports").insert({
+          reporter_id: user.id,
+          target_type: "comment",
+          comment_id: itemId,
+          reason: selectedReason,
+          details: details.trim() || null,
+          priority,
+        })
+        if (insertError) {
+          setSubmitError(insertError.message)
+          setSubmitting(false)
+          return
+        }
+      }
+
+      setSubmitted(true)
+      setTimeout(() => {
+        setSubmitted(false)
+        setSelectedReason("")
+        setDetails("")
+        onClose()
+      }, 2000)
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Could not submit report.")
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -81,9 +130,15 @@ export function ReportModal({ isOpen, onClose, type, itemId }: ReportModalProps)
                 Help us understand what&apos;s wrong with this {type}. Your report is anonymous.
               </p>
 
+              {submitError && (
+                <div className="mb-4 border border-destructive/50 bg-destructive/10 p-3">
+                  <p className="text-xs text-destructive tracking-wider">{submitError}</p>
+                </div>
+              )}
+
               {/* Reason Selection */}
               <div className="space-y-2 mb-6">
-                {reportReasons.map((reason) => (
+                {REPORT_REASONS.map((reason) => (
                   <label 
                     key={reason.id}
                     className={`flex items-center gap-3 p-3 border cursor-pointer transition-colors ${
@@ -137,10 +192,10 @@ export function ReportModal({ isOpen, onClose, type, itemId }: ReportModalProps)
                 </button>
                 <button
                   type="submit"
-                  disabled={!selectedReason}
+                  disabled={!selectedReason || submitting}
                   className="retro-btn flex-1 py-3 text-xs tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Submit Report
+                  {submitting ? "Submitting…" : "Submit Report"}
                 </button>
               </div>
             </form>

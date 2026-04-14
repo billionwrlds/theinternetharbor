@@ -2,12 +2,13 @@
 
 import Link from "next/link"
 import { useParams } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { format } from "date-fns"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { ChevronUp, Reply, MoreHorizontal, Plus, Flag } from "lucide-react"
 import { createClient } from "@/lib/supabase"
+import { ensureProfileExists } from "@/lib/profile"
 
 type PostRow = {
   id: string
@@ -26,76 +27,154 @@ type CommentRow = {
   profiles: { username: string | null; display_name: string | null } | { username: string | null; display_name: string | null }[] | null
 }
 
+async function loadReactionCounts(
+  supabase: ReturnType<typeof createClient>,
+  postId: string,
+  commentIds: string[]
+) {
+  const { count: postLikes } = await supabase
+    .from("reactions")
+    .select("*", { count: "exact", head: true })
+    .eq("post_id", postId)
+    .eq("target", "post")
+
+  const commentCounts: Record<string, number> = {}
+  if (commentIds.length > 0) {
+    const { data: reactionRows } = await supabase
+      .from("reactions")
+      .select("comment_id")
+      .eq("target", "comment")
+      .in("comment_id", commentIds)
+
+    for (const row of reactionRows ?? []) {
+      if (row.comment_id) {
+        commentCounts[row.comment_id] = (commentCounts[row.comment_id] ?? 0) + 1
+      }
+    }
+  }
+
+  return { postLikes: postLikes ?? 0, commentCounts }
+}
+
 export default function ThreadPage() {
   const params = useParams()
   const id = typeof params?.id === "string" ? params.id : ""
 
   const [post, setPost] = useState<PostRow | null>(null)
   const [comments, setComments] = useState<CommentRow[]>([])
+  const [postLikeCount, setPostLikeCount] = useState(0)
+  const [commentLikeCounts, setCommentLikeCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [replyBody, setReplyBody] = useState("")
+  const [replyBusy, setReplyBusy] = useState(false)
+  const [replyError, setReplyError] = useState<string | null>(null)
+  const [hasSession, setHasSession] = useState(false)
 
-  useEffect(() => {
+  const loadThread = useCallback(async () => {
     if (!id) {
       setError("Invalid thread link.")
       setLoading(false)
       return
     }
 
-    let cancelled = false
+    setLoading(true)
+    setError(null)
+    const supabase = createClient()
 
-    async function load() {
-      setLoading(true)
-      setError(null)
-      const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    setHasSession(!!user)
 
-      const { data: postData, error: postError } = await supabase
-        .from("posts")
-        .select("id,title,body,created_at,is_anonymous,categories(name),profiles(username,display_name)")
-        .eq("id", id)
-        .maybeSingle()
+    const { data: postData, error: postError } = await supabase
+      .from("posts")
+      .select("id,title,body,created_at,is_anonymous,categories(name),profiles(username,display_name)")
+      .eq("id", id)
+      .maybeSingle()
 
-      if (cancelled) return
-
-      if (postError) {
-        setError(postError.message)
-        setPost(null)
-        setLoading(false)
-        return
-      }
-
-      if (!postData) {
-        setError("This post could not be found.")
-        setPost(null)
-        setLoading(false)
-        return
-      }
-
-      setPost(postData as PostRow)
-
-      const { data: commentsData, error: commentsError } = await supabase
-        .from("comments")
-        .select("id,body,created_at,profiles(username,display_name)")
-        .eq("post_id", id)
-        .order("created_at", { ascending: true })
-
-      if (cancelled) return
-
-      if (commentsError) {
-        setError(commentsError.message)
-        setComments([])
-      } else {
-        setComments((commentsData ?? []) as CommentRow[])
-      }
-
+    if (postError) {
+      setError(postError.message)
+      setPost(null)
       setLoading(false)
+      return
     }
 
-    void load()
-    return () => {
-      cancelled = true
+    if (!postData) {
+      setError("This post could not be found.")
+      setPost(null)
+      setLoading(false)
+      return
     }
+
+    setPost(postData as PostRow)
+
+    const { data: commentsData, error: commentsError } = await supabase
+      .from("comments")
+      .select("id,body,created_at,profiles(username,display_name)")
+      .eq("post_id", id)
+      .order("created_at", { ascending: true })
+
+    if (commentsError) {
+      setError(commentsError.message)
+      setComments([])
+    } else {
+      const list = (commentsData ?? []) as CommentRow[]
+      setComments(list)
+      const cids = list.map((c) => c.id)
+      const counts = await loadReactionCounts(supabase, id, cids)
+      setPostLikeCount(counts.postLikes)
+      setCommentLikeCounts(counts.commentCounts)
+    }
+
+    setLoading(false)
   }, [id])
+
+  useEffect(() => {
+    void loadThread()
+  }, [loadThread])
+
+  async function submitReply(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setReplyError(null)
+    const text = replyBody.trim()
+    if (!text) {
+      setReplyError("Write something first.")
+      return
+    }
+
+    setReplyBusy(true)
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        setReplyError("You must be logged in to reply.")
+        return
+      }
+
+      await ensureProfileExists(user.id)
+
+      const { error: insertError } = await supabase.from("comments").insert({
+        post_id: id,
+        author_id: user.id,
+        body: text,
+      })
+
+      if (insertError) {
+        setReplyError(insertError.message)
+        return
+      }
+
+      setReplyBody("")
+      await loadThread()
+    } catch (err) {
+      setReplyError(err instanceof Error ? err.message : "Could not post reply.")
+    } finally {
+      setReplyBusy(false)
+    }
+  }
 
   const category =
     post && (Array.isArray(post.categories) ? post.categories[0] : post.categories)
@@ -179,7 +258,7 @@ export default function ThreadPage() {
                           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
                           </svg>
-                          Support
+                          Support ({postLikeCount})
                         </button>
                         <button
                           type="button"
@@ -215,7 +294,7 @@ export default function ThreadPage() {
                           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
                           </svg>
-                          Support
+                          Support ({postLikeCount})
                         </button>
                         <button
                           type="button"
@@ -229,6 +308,40 @@ export default function ThreadPage() {
                   </div>
                 </div>
               </article>
+
+              <div className="terminal-window mb-6">
+                <div className="p-5">
+                  <p className="text-xs text-muted-foreground tracking-wider mb-3">Add a reply</p>
+                  {hasSession ? (
+                    <form onSubmit={submitReply} className="space-y-3">
+                      {replyError && (
+                        <p className="text-xs text-destructive">{replyError}</p>
+                      )}
+                      <textarea
+                        value={replyBody}
+                        onChange={(e) => setReplyBody(e.target.value)}
+                        placeholder="Write your reply…"
+                        rows={4}
+                        className="w-full bg-secondary border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary px-4 py-3 resize-y font-serif text-sm"
+                      />
+                      <button
+                        type="submit"
+                        disabled={replyBusy}
+                        className="retro-btn px-6 py-2.5 text-xs tracking-widest"
+                      >
+                        {replyBusy ? "Posting…" : "Post reply"}
+                      </button>
+                    </form>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      <Link href="/login" className="text-primary hover:underline">
+                        Log in
+                      </Link>{" "}
+                      to reply to this thread.
+                    </p>
+                  )}
+                </div>
+              </div>
 
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-sm tracking-[0.2em] text-foreground">Replies</h2>
@@ -271,7 +384,7 @@ export default function ThreadPage() {
                           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
                         >
                           <ChevronUp className="w-4 h-4" />
-                          Like
+                          Like ({commentLikeCounts[comment.id] ?? 0})
                         </button>
                         <button
                           type="button"

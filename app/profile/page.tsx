@@ -22,6 +22,8 @@ type PostRow = {
   body: string
   created_at: string | null
   categories: { name: string | null } | { name: string | null }[] | null
+  comments: { count: number }[] | null
+  reactions: { count: number }[] | null
 }
 
 export default function ProfilePage() {
@@ -61,7 +63,7 @@ export default function ProfilePage() {
 
       const { data: postsData, error: postsError } = await supabase
         .from("posts")
-        .select("id,title,body,created_at,categories(name)")
+        .select("id,title,body,created_at,categories(name),comments(count),reactions(count)")
         .eq("author_id", user.id)
         .order("created_at", { ascending: false })
 
@@ -198,6 +200,8 @@ export default function ProfilePage() {
                 {posts.map((post) => {
                   const cat = Array.isArray(post.categories) ? post.categories[0] : post.categories
                   const excerpt = post.body.length > 160 ? `${post.body.slice(0, 160).trim()}…` : post.body
+                  const likesCount = Array.isArray(post.reactions) ? post.reactions[0]?.count ?? 0 : 0
+                  const commentsCount = Array.isArray(post.comments) ? post.comments[0]?.count ?? 0 : 0
                   return (
                     <article key={post.id} className="terminal-window">
                       <div className="p-5">
@@ -229,11 +233,11 @@ export default function ProfilePage() {
                           <div className="flex items-center gap-4">
                             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <Heart className="w-4 h-4" />
-                              —
+                              {likesCount}
                             </span>
                             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <MessageSquare className="w-4 h-4" />
-                              —
+                              {commentsCount}
                             </span>
                           </div>
                           <Link

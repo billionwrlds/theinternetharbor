@@ -1,59 +1,68 @@
+"use client"
+
 import Link from "next/link"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { format } from "date-fns"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { Heart, MessageSquare, Plus, Grid, List, Search } from "lucide-react"
+import { createClient } from "@/lib/supabase"
 
-const posts = [
-  {
-    id: "902",
-    title: "Finding calm in the chaos: A guide",
-    date: "Oct 12, 2024",
-    category: "Advice",
-    excerpt: "There&apos;s a specific kind of peace that comes when you stop fighting your feelings. I&apos;ve learned that accepting where I am is the first step to moving forward...",
-    likes: "1.2k",
-    comments: 45,
-    author: "quiet_mind_22",
-  },
-  {
-    id: "884",
-    title: "The ups and downs of recovery",
-    date: "Oct 5, 2024",
-    category: "Reflection",
-    excerpt: "Some days feel like progress, others feel like starting over. Recognizing that this is normal has been the biggest help...",
-    likes: "843",
-    comments: 12,
-    author: "morning_coffee",
-  },
-  {
-    id: "856",
-    title: "Creating my safe space",
-    date: "Sep 28, 2024",
-    category: "Wins",
-    excerpt: "Finally set up a corner in my room that&apos;s just for me. A place to breathe and think without distractions...",
-    likes: "3.1k",
-    comments: 156,
-    author: "night_owl_23",
-  },
-  {
-    id: "812",
-    title: "When expectations feel too heavy",
-    date: "Sep 20, 2024",
-    category: "Vent",
-    excerpt: "They keep asking when I&apos;ll be \"back to normal.\" What they don&apos;t understand is that I&apos;m finding my own version of okay...",
-    likes: "2.4k",
-    comments: 89,
-    author: "kind_stranger",
-  },
-]
+type PostRow = {
+  id: string
+  title: string
+  body: string
+  created_at: string | null
+  categories: { name: string | null } | { name: string | null }[] | null
+  comments: { count: number }[] | null
+  reactions: { count: number }[] | null
+}
 
 export default function LogsPage() {
+  const router = useRouter()
+  const [posts, setPosts] = useState<PostRow[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function load() {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (cancelled) return
+      if (!user) {
+        router.replace("/login")
+        return
+      }
+
+      const { data, error } = await supabase
+        .from("posts")
+        .select("id,title,body,created_at,categories(name),comments(count),reactions(count)")
+        .eq("author_id", user.id)
+        .order("created_at", { ascending: false })
+
+      if (cancelled) return
+      if (!error && data) {
+        setPosts(data as PostRow[])
+      }
+      setLoading(false)
+    }
+
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [router])
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      
+
       <main className="flex-1 bg-background">
         <div className="max-w-5xl mx-auto px-4 py-8">
-          {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
             <div>
               <h1 className="font-heading text-3xl md:text-4xl text-foreground">My Posts</h1>
@@ -62,16 +71,21 @@ export default function LogsPage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <button className="w-10 h-10 border border-primary bg-secondary flex items-center justify-center text-foreground">
+              <button
+                type="button"
+                className="w-10 h-10 border border-primary bg-secondary flex items-center justify-center text-foreground"
+              >
                 <Grid className="w-5 h-5" />
               </button>
-              <button className="w-10 h-10 border border-border flex items-center justify-center text-muted-foreground hover:border-muted-foreground transition-colors">
+              <button
+                type="button"
+                className="w-10 h-10 border border-border flex items-center justify-center text-muted-foreground hover:border-muted-foreground transition-colors"
+              >
                 <List className="w-5 h-5" />
               </button>
             </div>
           </div>
 
-          {/* Search/Filter Bar */}
           <div className="terminal-window mb-6">
             <div className="p-4 flex flex-col sm:flex-row gap-4">
               <div className="flex-1 flex items-center gap-2 bg-secondary border border-border px-3 py-2">
@@ -83,78 +97,101 @@ export default function LogsPage() {
                 />
               </div>
               <div className="flex gap-2">
-                <button className="px-4 py-2 text-xs tracking-wider border border-primary bg-secondary text-foreground">
+                <button
+                  type="button"
+                  className="px-4 py-2 text-xs tracking-wider border border-primary bg-secondary text-foreground"
+                >
                   All
                 </button>
-                <button className="px-4 py-2 text-xs tracking-wider border border-border text-muted-foreground hover:border-muted-foreground">
+                <button
+                  type="button"
+                  className="px-4 py-2 text-xs tracking-wider border border-border text-muted-foreground hover:border-muted-foreground"
+                >
                   Advice
                 </button>
-                <button className="px-4 py-2 text-xs tracking-wider border border-border text-muted-foreground hover:border-muted-foreground">
+                <button
+                  type="button"
+                  className="px-4 py-2 text-xs tracking-wider border border-border text-muted-foreground hover:border-muted-foreground"
+                >
                   Wins
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Posts List */}
-          <div className="space-y-4">
-            {posts.map((post) => (
-              <article key={post.id} className="terminal-window">
-                <div className="p-5">
-                  <div className="flex items-start justify-between gap-4 mb-2">
-                    <div>
-                      <Link 
-                        href={`/forums/thread/${post.id}`}
-                        className="font-heading text-lg text-foreground hover:text-primary transition-colors block"
-                      >
-                        {post.title}
-                      </Link>
-                      <div className="flex items-center gap-3 mt-1">
-                        <span className="text-xs text-muted-foreground">{post.date}</span>
-                        <span className="tag tag-active">{post.category}</span>
-                      </div>
-                    </div>
-                    <span className="text-xs text-primary shrink-0">#{post.id}</span>
-                  </div>
-                  
-                  <p className="font-serif text-sm text-muted-foreground leading-relaxed mb-4 line-clamp-3">
-                    {post.excerpt}
-                  </p>
+          {loading && <p className="text-xs text-muted-foreground mb-4">Loading…</p>}
 
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Heart className="w-4 h-4" />
-                        {post.likes}
-                      </span>
-                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <MessageSquare className="w-4 h-4" />
-                        {post.comments}
-                      </span>
+          <div className="space-y-4">
+            {!loading && posts.length === 0 && (
+              <p className="text-sm text-muted-foreground">You haven&apos;t created any posts yet.</p>
+            )}
+            {posts.map((post) => {
+              const cat = Array.isArray(post.categories) ? post.categories[0] : post.categories
+              const dateStr = post.created_at ? format(new Date(post.created_at), "MMM d, yyyy") : ""
+              const excerpt =
+                post.body.length > 160 ? `${post.body.slice(0, 160).trim()}…` : post.body
+              const likesCount = Array.isArray(post.reactions) ? post.reactions[0]?.count ?? 0 : 0
+              const commentsCount = Array.isArray(post.comments) ? post.comments[0]?.count ?? 0 : 0
+
+              return (
+                <article key={post.id} className="terminal-window">
+                  <div className="p-5">
+                    <div className="flex items-start justify-between gap-4 mb-2">
+                      <div>
+                        <Link
+                          href={`/forums/thread/${post.id}`}
+                          className="font-heading text-lg text-foreground hover:text-primary transition-colors block"
+                        >
+                          {post.title}
+                        </Link>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-xs text-muted-foreground">{dateStr}</span>
+                          {cat?.name && <span className="tag tag-active">{cat.name}</span>}
+                        </div>
+                      </div>
+                      <span className="text-xs text-primary shrink-0">#{String(post.id).slice(0, 8)}</span>
                     </div>
-                    <Link 
-                      href={`/forums/thread/${post.id}`}
-                      className="text-xs text-primary hover:text-primary/80 transition-colors tracking-wider"
-                    >
-                      Read More
-                    </Link>
+
+                    <p className="font-serif text-sm text-muted-foreground leading-relaxed mb-4 line-clamp-3">
+                      {excerpt}
+                    </p>
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Heart className="w-4 h-4" />
+                          {likesCount}
+                        </span>
+                        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <MessageSquare className="w-4 h-4" />
+                          {commentsCount}
+                        </span>
+                      </div>
+                      <Link
+                        href={`/forums/thread/${post.id}`}
+                        className="text-xs text-primary hover:text-primary/80 transition-colors tracking-wider"
+                      >
+                        Read More
+                      </Link>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              )
+            })}
           </div>
 
-          {/* Load More */}
           <div className="flex justify-center mt-8">
-            <button className="retro-btn-outline px-6 py-2.5 text-xs tracking-widest">
+            <button type="button" className="retro-btn-outline px-6 py-2.5 text-xs tracking-widest">
               Load More Posts
             </button>
           </div>
         </div>
       </main>
 
-      {/* Floating Action Button */}
-      <Link href="/forums/create" className="fixed bottom-6 right-6 w-14 h-14 retro-btn flex items-center justify-center">
+      <Link
+        href="/forums/create"
+        className="fixed bottom-6 right-6 w-14 h-14 retro-btn flex items-center justify-center"
+      >
         <Plus className="w-6 h-6" />
       </Link>
 

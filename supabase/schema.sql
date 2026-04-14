@@ -235,3 +235,43 @@ values
   ('College Life', 'college-life', 'Mental health discussions for college life.', 40)
 on conflict (slug) do nothing;
 
+-- REPORTS (user-submitted moderation flags)
+create table if not exists public.reports (
+  id uuid primary key default gen_random_uuid(),
+  reporter_id uuid not null references public.profiles (id) on delete cascade,
+  target_type text not null check (target_type in ('post', 'comment')),
+  post_id uuid references public.posts (id) on delete cascade,
+  comment_id uuid references public.comments (id) on delete cascade,
+  reason text not null,
+  details text,
+  status text not null default 'pending' check (status in ('pending', 'reviewed', 'resolved', 'dismissed')),
+  priority text not null default 'medium' check (priority in ('high', 'medium', 'low')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint reports_target_check check (
+    (target_type = 'post' and post_id is not null and comment_id is null) or
+    (target_type = 'comment' and comment_id is not null)
+  )
+);
+
+create index if not exists reports_status_idx on public.reports (status);
+create index if not exists reports_created_at_idx on public.reports (created_at desc);
+
+create trigger set_reports_updated_at
+before update on public.reports
+for each row execute procedure public.set_updated_at();
+
+alter table public.reports enable row level security;
+
+create policy "authenticated users can view reports"
+on public.reports
+for select
+to authenticated
+using (true);
+
+create policy "authenticated users can insert own reports"
+on public.reports
+for insert
+to authenticated
+with check (auth.uid() = reporter_id);
+

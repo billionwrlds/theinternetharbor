@@ -4,48 +4,19 @@ import { useState } from "react"
 import Link from "next/link"
 import { Bell, MessageSquare, Heart, X } from "lucide-react"
 
-const mockNotifications = [
-  {
-    id: 1,
-    type: "reply",
-    user: "quiet_mind_22",
-    content: "replied to your post \"Finding peace in chaos\"",
-    time: "2 min ago",
-    read: false,
-    link: "/forums/thread/4492",
-  },
-  {
-    id: 2,
-    type: "like",
-    user: "night_owl_23",
-    content: "liked your comment",
-    time: "15 min ago",
-    read: false,
-    link: "/forums/thread/4412",
-  },
-  {
-    id: 3,
-    type: "reply",
-    user: "morning_coffee",
-    content: "mentioned you in a comment",
-    time: "1 hour ago",
-    read: true,
-    link: "/forums/thread/8829",
-  },
-  {
-    id: 4,
-    type: "like",
-    user: "kind_stranger",
-    content: "and 5 others liked your post",
-    time: "3 hours ago",
-    read: true,
-    link: "/forums/thread/902",
-  },
-]
+type NotificationItem = {
+  id: number
+  type: "reply" | "like"
+  user: string
+  content: string
+  time: string
+  read: boolean
+  link: string
+}
 
 export function NotificationDropdown() {
   const [isOpen, setIsOpen] = useState(false)
-  const [notifications, setNotifications] = useState(mockNotifications)
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
   
   const unreadCount = notifications.filter(n => !n.read).length
 

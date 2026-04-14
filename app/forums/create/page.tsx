@@ -1,28 +1,49 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { Terminal, X, Minus, Square, Send } from "lucide-react"
 import { createClient } from "@/lib/supabase"
+import { ensureProfileExists } from "@/lib/profile"
 
-const categories = [
-  { id: "vent", label: "Vent", slug: "vent" },
-  { id: "advice", label: "Advice", slug: "advice" },
-  { id: "wins", label: "Wins", slug: "wins" },
-  { id: "college", label: "College Life", slug: "college-life" },
-]
+type CategoryOption = { slug: string; name: string }
 
 export default function CreatePostPage() {
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
   const [postAnonymously, setPostAnonymously] = useState(true)
-  const [selectedCategory, setSelectedCategory] = useState("vent")
+  const [categories, setCategories] = useState<CategoryOption[]>([])
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const router = useRouter()
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadCategories() {
+      const supabase = createClient()
+      const { data, error: catError } = await supabase
+        .from("categories")
+        .select("slug,name")
+        .order("sort_order", { ascending: true })
+
+      if (cancelled) return
+      if (!catError && data?.length) {
+        const list = data as CategoryOption[]
+        setCategories(list)
+        setSelectedSlug((prev) => prev ?? list[0]?.slug ?? null)
+      }
+    }
+
+    void loadCategories()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -35,9 +56,9 @@ export default function CreatePostPage() {
       return
     }
 
-    const cat = categories.find((c) => c.id === selectedCategory)
+    const cat = categories.find((c) => c.slug === selectedSlug)
     if (!cat) {
-      setError("Invalid category.")
+      setError("Categories are still loading or none are available.")
       return
     }
 
@@ -55,19 +76,7 @@ export default function CreatePostPage() {
         return
       }
 
-      const { data: existingProfile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("id", user.id)
-        .maybeSingle()
-
-      if (!existingProfile) {
-        const { error: profileError } = await supabase.from("profiles").insert({ id: user.id })
-        if (profileError) {
-          setError(profileError.message)
-          return
-        }
-      }
+      await ensureProfileExists(user.id)
 
       const { data: categoryRow, error: categoryError } = await supabase
         .from("categories")
@@ -145,16 +154,16 @@ export default function CreatePostPage() {
                 <div className="flex flex-wrap gap-2">
                   {categories.map((cat) => (
                     <button
-                      key={cat.id}
+                      key={cat.slug}
                       type="button"
-                      onClick={() => setSelectedCategory(cat.id)}
+                      onClick={() => setSelectedSlug(cat.slug)}
                       className={`px-4 py-2 text-xs tracking-wider border transition-colors ${
-                        selectedCategory === cat.id
+                        selectedSlug === cat.slug
                           ? "bg-secondary border-primary text-foreground"
                           : "border-border text-muted-foreground hover:border-muted-foreground"
                       }`}
                     >
-                      {cat.label}
+                      {cat.name}
                     </button>
                   ))}
                 </div>

@@ -6,6 +6,7 @@ import { Footer } from "@/components/footer"
 import { MessageSquare, Bookmark, Plus, Share2, Users } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { useEffect, useMemo, useState } from "react"
+import { createClient } from "@/lib/supabase"
 
 const sidebarLinks = [
   { icon: MessageSquare, label: "All Posts", href: "/forums", active: true },
@@ -28,11 +29,15 @@ type PostRow = {
   is_anonymous: boolean
   categories: { name: string | null; slug: string | null } | { name: string | null; slug: string | null }[] | null
   profiles: { username: string | null; display_name: string | null; avatar_url: string | null } | { username: string | null; display_name: string | null; avatar_url: string | null }[] | null
+  comments: { count: number }[] | null
+  reactions: { count: number }[] | null
 }
 
 export default function ForumsPage() {
   const [categories, setCategories] = useState<CategoryRow[]>([])
   const [posts, setPosts] = useState<PostRow[]>([])
+  const [memberCount, setMemberCount] = useState<number | null>(null)
+  const [categoryPostCounts, setCategoryPostCounts] = useState<Record<number, number>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -44,69 +49,52 @@ export default function ForumsPage() {
       setError(null)
 
       try {
-        const supabaseUrlRaw = process.env.NEXT_PUBLIC_SUPABASE_URL
-        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+        const supabase = createClient()
 
-        if (!supabaseUrlRaw || !supabaseAnonKey) {
-          if (cancelled) return
-          setError("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY")
-          setLoading(false)
-          return
-        }
-
-        const supabaseUrl = supabaseUrlRaw.replace(/\/+$/, "")
-
-        const headers: HeadersInit = {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
-        }
-
-        const catsUrl = `${supabaseUrl}/rest/v1/categories?select=id,name,slug,sort_order&order=sort_order.asc`
-        const postsUrl =
-          `${supabaseUrl}/rest/v1/posts?select=id,title,body,created_at,is_anonymous,` +
-          `categories(name,slug),profiles(username,display_name,avatar_url)&order=created_at.desc&limit=25`
-
-        let catsRes: Response
-        let postsRes: Response
-        let catsText = ""
-        let postsText = ""
-
-        try {
-          ;[catsRes, postsRes] = await Promise.all([
-            fetch(catsUrl, { headers }),
-            fetch(postsUrl, { headers }),
-          ])
-          ;[catsText, postsText] = await Promise.all([catsRes.text(), postsRes.text()])
-        } catch (e) {
-          if (cancelled) return
-          const message = e instanceof Error ? e.message : String(e)
-          setError(
-            `Network error while fetching Supabase.\n` +
-              `message: ${message}\n` +
-              `catsUrl: ${catsUrl}\n` +
-              `postsUrl: ${postsUrl}`
-          )
-          setCategories([])
-          setPosts([])
-          setLoading(false)
-          return
-        }
+        const [
+          { data: cats, error: catsError },
+          { data: postsData, error: postsError },
+          { count: profilesCount, error: profilesCountError },
+        ] = await Promise.all([
+          supabase.from("categories").select("id,name,slug,sort_order").order("sort_order", { ascending: true }),
+          supabase
+            .from("posts")
+            .select(
+              "id,title,body,created_at,is_anonymous,categories(name,slug),profiles(username,display_name,avatar_url),comments(count),reactions(count)"
+            )
+            .order("created_at", { ascending: false })
+            .limit(25),
+          supabase.from("profiles").select("*", { count: "exact", head: true }),
+        ])
 
         if (cancelled) return
 
-        if (!catsRes.ok || !postsRes.ok) {
-          setError(
-            `Supabase REST error: categories=${catsRes.status} posts=${postsRes.status}\n` +
-              `categories: ${catsText}\nposts: ${postsText}`
-          )
+        if (catsError || postsError) {
+          setError(catsError?.message || postsError?.message || "Failed to load forums")
           setCategories([])
           setPosts([])
           setLoading(false)
           return
         }
 
-        setCategories((JSON.parse(catsText) ?? []) as CategoryRow[])
-        setPosts((JSON.parse(postsText) ?? []) as PostRow[])
+        if (!profilesCountError && profilesCount !== null) {
+          setMemberCount(profilesCount)
+        }
+
+        const catList = (cats ?? []) as CategoryRow[]
+        setCategories(catList)
+        setPosts((postsData ?? []) as PostRow[])
+
+        const counts: Record<number, number> = {}
+        for (const cat of catList) {
+          const { count } = await supabase
+            .from("posts")
+            .select("*", { count: "exact", head: true })
+            .eq("category_id", cat.id)
+          if (!cancelled) counts[cat.id] = count ?? 0
+        }
+        if (!cancelled) setCategoryPostCounts(counts)
+
         setLoading(false)
       } catch (e) {
         if (cancelled) return
@@ -167,8 +155,8 @@ export default function ForumsPage() {
                   <h3 className="text-xs tracking-wider text-muted-foreground mb-4">Community Status</h3>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Online Now</span>
-                      <span className="text-xs text-primary">1,204</span>
+                      <span className="text-xs text-muted-foreground">Members</span>
+                      <span className="text-xs text-primary">{memberCount ?? "—"}</span>
                     </div>
                     <div className="w-full h-1 bg-secondary">
                       <div className="h-full bg-primary w-3/4" />
@@ -216,6 +204,7 @@ export default function ForumsPage() {
                     className="px-4 py-2 text-xs tracking-wider border transition-colors border-border text-muted-foreground hover:border-muted-foreground"
                   >
                     {cat.name}
+                    {categoryPostCounts[cat.id] !== undefined ? ` (${categoryPostCounts[cat.id]})` : ""}
                   </Link>
                 ))}
               </div>
@@ -284,8 +273,8 @@ export default function ForumsPage() {
                     : ""
                   const excerpt =
                     post.body.length > 220 ? `${post.body.slice(0, 220).trim()}…` : post.body
-                  const commentsCount = 0
-                  const likesCount = 0
+                  const commentsCount = Array.isArray(post.comments) ? post.comments[0]?.count ?? 0 : 0
+                  const likesCount = Array.isArray(post.reactions) ? post.reactions[0]?.count ?? 0 : 0
 
                   return (
                     <article key={post.id} className="terminal-window">
