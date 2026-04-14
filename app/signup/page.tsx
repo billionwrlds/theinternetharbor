@@ -4,6 +4,8 @@ import { useState } from "react"
 import Link from "next/link"
 import { Footer } from "@/components/footer"
 import { Square, Minus, Eye, EyeOff, AtSign, User } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase"
 
 export default function SignupPage() {
   const [username, setUsername] = useState("")
@@ -12,6 +14,46 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const router = useRouter()
+
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError(null)
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.")
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      })
+
+      if (error) {
+        setError(error.message)
+        return
+      }
+
+      // If email confirmations are enabled, user may need to confirm before they have a session.
+      if (data.user) {
+        router.push("/onboarding")
+        router.refresh()
+      } else {
+        router.push("/check-email")
+        router.refresh()
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Signup failed.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -44,7 +86,12 @@ export default function SignupPage() {
               </div>
 
               {/* Form */}
-              <form className="space-y-5">
+              <form className="space-y-5" onSubmit={onSubmit}>
+                {error && (
+                  <div className="border border-destructive/50 bg-destructive/10 p-3">
+                    <p className="text-xs text-destructive tracking-wider">{error}</p>
+                  </div>
+                )}
                 {/* Username */}
                 <div>
                   <label className="block text-xs text-muted-foreground tracking-wider mb-2">
@@ -141,8 +188,9 @@ export default function SignupPage() {
                 <button
                   type="submit"
                   className="retro-btn w-full py-4 text-sm tracking-widest"
+                  disabled={submitting}
                 >
-                  Create Account
+                  {submitting ? "Creating..." : "Create Account"}
                 </button>
 
                 {/* Links */}

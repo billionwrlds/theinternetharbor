@@ -2,13 +2,41 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Footer } from "@/components/footer"
 import { Square, Minus, Eye, EyeOff, AtSign } from "lucide-react"
+import { createClient } from "@/lib/supabase"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const router = useRouter()
+
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError(null)
+    setSubmitting(true)
+    try {
+      const supabase = createClient()
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+      if (signInError) {
+        setError(signInError.message)
+        return
+      }
+      router.push("/forums")
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -41,7 +69,12 @@ export default function LoginPage() {
               </div>
 
               {/* Form */}
-              <form className="space-y-6">
+              <form className="space-y-6" onSubmit={onSubmit}>
+                {error && (
+                  <div className="border border-destructive/50 bg-destructive/10 p-3">
+                    <p className="text-xs text-destructive tracking-wider">{error}</p>
+                  </div>
+                )}
                 {/* Email */}
                 <div>
                   <label className="block text-xs text-muted-foreground tracking-wider mb-2">
@@ -86,8 +119,9 @@ export default function LoginPage() {
                 <button
                   type="submit"
                   className="retro-btn w-full py-4 text-sm tracking-widest mt-8"
+                  disabled={submitting}
                 >
-                  Login
+                  {submitting ? "Signing in…" : "Login"}
                 </button>
 
                 {/* Links */}

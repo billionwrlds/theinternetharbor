@@ -1,45 +1,11 @@
+"use client"
+
 import Link from "next/link"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { MessageSquare, Bookmark, Plus, Share2, Users } from "lucide-react"
-
-const categories = [
-  { id: "all", label: "All Posts", active: true },
-  { id: "vent", label: "Vent", active: false },
-  { id: "advice", label: "Advice", active: false },
-  { id: "wins", label: "Wins", active: false },
-  { id: "college", label: "College Life", active: false },
-]
-
-const threads = [
-  {
-    id: "8829-X",
-    title: "Finding peace during exam season",
-    category: "Advice",
-    posted: "2 hours ago",
-    excerpt: "The library is finally empty at 3 AM. Does anyone else find the silence of these large halls more comforting than their actual room? Looking for tips on maintaining focus without burnout...",
-    comments: 24,
-    likes: 156,
-  },
-  {
-    id: "4412-Z",
-    title: "Small Win: Finished my project a week early",
-    category: "Wins",
-    posted: "5 hours ago",
-    excerpt: "Finally broke the cycle of procrastination. It feels like I can breathe again. Going to spend the whole weekend relaxing and celebrating this small victory...",
-    comments: 12,
-    likes: 89,
-  },
-  {
-    id: "1092-B",
-    title: "Does anyone else feel overwhelmed lately?",
-    category: "Vent",
-    posted: "8 hours ago",
-    excerpt: "Just a general vent about the weight of expectations. It feels like everyone else has it figured out except me. Hard to explain the feeling of being stuck...",
-    comments: 45,
-    likes: 312,
-  },
-]
+import { formatDistanceToNow } from "date-fns"
+import { useEffect, useMemo, useState } from "react"
 
 const sidebarLinks = [
   { icon: MessageSquare, label: "All Posts", href: "/forums", active: true },
@@ -47,7 +13,119 @@ const sidebarLinks = [
   { icon: Bookmark, label: "Saved Posts", href: "/forums/saved", active: false },
 ]
 
+type CategoryRow = {
+  id: number
+  name: string
+  slug: string
+  sort_order: number
+}
+
+type PostRow = {
+  id: string
+  title: string
+  body: string
+  created_at: string | null
+  is_anonymous: boolean
+  categories: { name: string | null; slug: string | null } | { name: string | null; slug: string | null }[] | null
+  profiles: { username: string | null; display_name: string | null; avatar_url: string | null } | { username: string | null; display_name: string | null; avatar_url: string | null }[] | null
+}
+
 export default function ForumsPage() {
+  const [categories, setCategories] = useState<CategoryRow[]>([])
+  const [posts, setPosts] = useState<PostRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function load() {
+      setLoading(true)
+      setError(null)
+
+      try {
+        const supabaseUrlRaw = process.env.NEXT_PUBLIC_SUPABASE_URL
+        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+        if (!supabaseUrlRaw || !supabaseAnonKey) {
+          if (cancelled) return
+          setError("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY")
+          setLoading(false)
+          return
+        }
+
+        const supabaseUrl = supabaseUrlRaw.replace(/\/+$/, "")
+
+        const headers: HeadersInit = {
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${supabaseAnonKey}`,
+        }
+
+        const catsUrl = `${supabaseUrl}/rest/v1/categories?select=id,name,slug,sort_order&order=sort_order.asc`
+        const postsUrl =
+          `${supabaseUrl}/rest/v1/posts?select=id,title,body,created_at,is_anonymous,` +
+          `categories(name,slug),profiles(username,display_name,avatar_url)&order=created_at.desc&limit=25`
+
+        let catsRes: Response
+        let postsRes: Response
+        let catsText = ""
+        let postsText = ""
+
+        try {
+          ;[catsRes, postsRes] = await Promise.all([
+            fetch(catsUrl, { headers }),
+            fetch(postsUrl, { headers }),
+          ])
+          ;[catsText, postsText] = await Promise.all([catsRes.text(), postsRes.text()])
+        } catch (e) {
+          if (cancelled) return
+          const message = e instanceof Error ? e.message : String(e)
+          setError(
+            `Network error while fetching Supabase.\n` +
+              `message: ${message}\n` +
+              `catsUrl: ${catsUrl}\n` +
+              `postsUrl: ${postsUrl}`
+          )
+          setCategories([])
+          setPosts([])
+          setLoading(false)
+          return
+        }
+
+        if (cancelled) return
+
+        if (!catsRes.ok || !postsRes.ok) {
+          setError(
+            `Supabase REST error: categories=${catsRes.status} posts=${postsRes.status}\n` +
+              `categories: ${catsText}\nposts: ${postsText}`
+          )
+          setCategories([])
+          setPosts([])
+          setLoading(false)
+          return
+        }
+
+        setCategories((JSON.parse(catsText) ?? []) as CategoryRow[])
+        setPosts((JSON.parse(postsText) ?? []) as PostRow[])
+        setLoading(false)
+      } catch (e) {
+        if (cancelled) return
+        const message = e instanceof Error ? e.message : String(e)
+        setError(`Unexpected error loading forums: ${message}`)
+        setCategories([])
+        setPosts([])
+        setLoading(false)
+      }
+    }
+
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const hasError = useMemo(() => Boolean(error), [error])
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
@@ -125,31 +203,98 @@ export default function ForumsPage() {
 
               {/* Category Filters */}
               <div className="flex flex-wrap gap-2 mb-6">
-                {categories.map((cat) => (
+                <Link
+                  href="/forums"
+                  className="px-4 py-2 text-xs tracking-wider border transition-colors bg-secondary border-primary text-foreground"
+                >
+                  All Posts
+                </Link>
+                {(categories ?? []).map((cat) => (
                   <Link
                     key={cat.id}
-                    href={cat.id === "all" ? "/forums" : `/forums/category/${cat.id}`}
-                    className={`px-4 py-2 text-xs tracking-wider border transition-colors ${
-                      cat.active
-                        ? "bg-secondary border-primary text-foreground"
-                        : "border-border text-muted-foreground hover:border-muted-foreground"
-                    }`}
+                    href={`/forums/category/${cat.slug}`}
+                    className="px-4 py-2 text-xs tracking-wider border transition-colors border-border text-muted-foreground hover:border-muted-foreground"
                   >
-                    {cat.label}
+                    {cat.name}
                   </Link>
                 ))}
               </div>
 
               {/* Thread List */}
               <div className="space-y-4">
-                {threads.map((thread) => (
-                  <article key={thread.id} className="terminal-window">
+                {hasError && (
+                  <div className="terminal-window">
                     <div className="terminal-header">
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 bg-primary" />
-                        <span className="text-xs text-muted-foreground">Post #{thread.id}</span>
+                        <span className="text-xs text-muted-foreground">Error</span>
                       </div>
-                      <span className="text-xs text-muted-foreground">{thread.posted}</span>
+                    </div>
+                    <div className="p-5">
+                      <p className="text-sm text-muted-foreground">
+                        Couldn&apos;t load forum posts right now. Double-check your Supabase env vars and that
+                        you ran `supabase/schema.sql`.
+                      </p>
+                      <pre className="mt-4 text-xs text-muted-foreground whitespace-pre-wrap">
+                        {String(error || "")}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+
+                {loading && (
+                  <div className="terminal-window">
+                    <div className="terminal-header">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 bg-primary" />
+                        <span className="text-xs text-muted-foreground">Loading</span>
+                      </div>
+                    </div>
+                    <div className="p-5">
+                      <p className="text-sm text-muted-foreground">Fetching posts…</p>
+                    </div>
+                  </div>
+                )}
+
+                {!loading && posts.length === 0 && !hasError && (
+                  <div className="terminal-window">
+                    <div className="terminal-header">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 bg-primary" />
+                        <span className="text-xs text-muted-foreground">No posts yet</span>
+                      </div>
+                    </div>
+                    <div className="p-5">
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Be the first to start a thread.
+                      </p>
+                      <Link href="/forums/create" className="retro-btn px-4 py-2.5 text-xs tracking-widest">
+                        Create a post
+                      </Link>
+                    </div>
+                  </div>
+                )}
+
+                {!loading && !hasError && posts.map((post) => {
+                  const category =
+                    Array.isArray(post.categories) ? post.categories[0] : post.categories
+                  const categoryName = category?.name ?? "Uncategorized"
+                  const posted = post.created_at
+                    ? formatDistanceToNow(new Date(post.created_at), { addSuffix: true })
+                    : ""
+                  const excerpt =
+                    post.body.length > 220 ? `${post.body.slice(0, 220).trim()}…` : post.body
+                  const commentsCount = 0
+                  const likesCount = 0
+
+                  return (
+                    <article key={post.id} className="terminal-window">
+                    <div className="terminal-header">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 bg-primary" />
+                        <span className="text-xs text-muted-foreground">Post #{String(post.id).slice(0, 8)}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{posted}</span>
                     </div>
                     <div className="p-5">
                       <div className="flex gap-4">
@@ -159,31 +304,29 @@ export default function ForumsPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-4 mb-2">
                             <Link 
-                              href={`/forums/thread/${thread.id}`}
+                              href={`/forums/thread/${post.id}`}
                               className="font-heading text-lg text-foreground hover:text-primary transition-colors"
                             >
-                              {thread.title}
+                              {post.title}
                             </Link>
-                            <span className={`tag shrink-0 ${
-                              thread.category === "Advice" ? "tag-active" : ""
-                            }`}>
-                              {thread.category}
+                            <span className="tag shrink-0">
+                              {categoryName}
                             </span>
                           </div>
                           <p className="font-serif text-sm text-muted-foreground leading-relaxed mb-4">
-                            {thread.excerpt}
+                            {excerpt}
                           </p>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-4">
                               <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                 <MessageSquare className="w-4 h-4" />
-                                {thread.comments}
+                                {commentsCount}
                               </span>
                               <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                   <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
                                 </svg>
-                                {thread.likes}
+                                {likesCount}
                               </span>
                             </div>
                             <button className="text-muted-foreground hover:text-foreground transition-colors">
@@ -194,7 +337,8 @@ export default function ForumsPage() {
                       </div>
                     </div>
                   </article>
-                ))}
+                  )
+                })}
               </div>
 
               {/* Load More */}

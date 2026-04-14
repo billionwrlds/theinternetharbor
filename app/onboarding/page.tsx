@@ -1,8 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Footer } from "@/components/footer"
 import { Square, Minus, User, Camera, ChevronRight } from "lucide-react"
+import { createClient } from "@/lib/supabase"
 
 const avatarOptions = [
   { id: 1, color: "bg-primary/30" },
@@ -13,36 +15,171 @@ const avatarOptions = [
   { id: 6, color: "bg-green-500/30" },
 ]
 
+const USERNAME_RE = /^[a-zA-Z0-9_-]{3,30}$/
+
 export default function OnboardingPage() {
+  const router = useRouter()
   const [username, setUsername] = useState("")
   const [bio, setBio] = useState("")
   const [selectedAvatar, setSelectedAvatar] = useState(1)
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [checkingAuth, setCheckingAuth] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function init() {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (cancelled) return
+
+      if (!user) {
+        router.replace("/login")
+        return
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("username, bio, avatar_url")
+        .eq("id", user.id)
+        .maybeSingle()
+
+      if (cancelled) return
+
+      if (profile?.username) {
+        router.replace("/forums")
+        return
+      }
+
+      if (profile?.bio) setBio(profile.bio)
+      if (profile?.avatar_url?.startsWith("preset:")) {
+        const n = parseInt(profile.avatar_url.replace("preset:", ""), 10)
+        if (!Number.isNaN(n) && n >= 1 && n <= 6) setSelectedAvatar(n)
+      }
+
+      setCheckingAuth(false)
+    }
+
+    void init()
+    return () => {
+      cancelled = true
+    }
+  }, [router])
+
+  async function ensureProfileRow(userId: string) {
+    const supabase = createClient()
+    const { data: existing } = await supabase.from("profiles").select("id").eq("id", userId).maybeSingle()
+    if (existing) return
+    const { error: insertError } = await supabase.from("profiles").insert({ id: userId })
+    if (insertError) throw new Error(insertError.message)
+  }
+
+  async function onSkip() {
+    setError(null)
+    setSubmitting(true)
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        router.replace("/login")
+        return
+      }
+      await ensureProfileRow(user.id)
+      router.push("/forums")
+      router.refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not continue.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError(null)
+
+    const u = username.trim()
+    if (!USERNAME_RE.test(u)) {
+      setError("Username must be 3–30 characters: letters, numbers, _ or - only.")
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        router.replace("/login")
+        return
+      }
+
+      const { error: upsertError } = await supabase.from("profiles").upsert(
+        {
+          id: user.id,
+          username: u,
+          display_name: u,
+          bio: bio.trim() || null,
+          avatar_url: `preset:${selectedAvatar}`,
+        },
+        { onConflict: "id" }
+      )
+
+      if (upsertError) {
+        if (upsertError.code === "23505" || upsertError.message.includes("duplicate")) {
+          setError("That username is already taken. Try another.")
+        } else {
+          setError(upsertError.message)
+        }
+        return
+      }
+
+      router.push("/forums")
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save profile.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
+        <p className="text-sm text-muted-foreground tracking-wider">Loading…</p>
+        <Footer />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-lg">
-          {/* Terminal Window */}
           <div className="terminal-window">
-            {/* Terminal Header */}
             <div className="terminal-header">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 bg-primary" />
                 <span className="text-xs text-muted-foreground tracking-wider">Set Up Your Profile</span>
               </div>
               <div className="flex items-center gap-2">
-                <button className="text-muted-foreground hover:text-foreground transition-colors">
+                <button type="button" className="text-muted-foreground hover:text-foreground transition-colors">
                   <Minus className="w-4 h-4" />
                 </button>
-                <button className="text-muted-foreground hover:text-foreground transition-colors">
+                <button type="button" className="text-muted-foreground hover:text-foreground transition-colors">
                   <Square className="w-3 h-3" />
                 </button>
               </div>
             </div>
 
-            {/* Content */}
             <div className="p-8">
-              {/* Title */}
               <div className="text-center mb-8">
                 <h1 className="font-heading text-3xl text-foreground mb-2">Welcome to Safe Harbor</h1>
                 <p className="text-sm text-muted-foreground">
@@ -50,18 +187,15 @@ export default function OnboardingPage() {
                 </p>
               </div>
 
-              {/* Avatar Selection */}
               <div className="mb-8">
-                <label className="block text-xs text-muted-foreground tracking-wider mb-4">
-                  Choose an Avatar
-                </label>
+                <label className="block text-xs text-muted-foreground tracking-wider mb-4">Choose an Avatar</label>
                 <div className="flex items-center gap-4">
-                  {/* Selected Avatar Preview */}
-                  <div className={`w-20 h-20 ${avatarOptions.find(a => a.id === selectedAvatar)?.color} border-2 border-primary flex items-center justify-center shrink-0`}>
+                  <div
+                    className={`w-20 h-20 ${avatarOptions.find((a) => a.id === selectedAvatar)?.color} border-2 border-primary flex items-center justify-center shrink-0`}
+                  >
                     <User className="w-10 h-10 text-foreground" />
                   </div>
-                  
-                  {/* Avatar Options */}
+
                   <div className="flex flex-wrap gap-2">
                     {avatarOptions.map((avatar) => (
                       <button
@@ -69,9 +203,7 @@ export default function OnboardingPage() {
                         type="button"
                         onClick={() => setSelectedAvatar(avatar.id)}
                         className={`w-10 h-10 ${avatar.color} border transition-colors flex items-center justify-center ${
-                          selectedAvatar === avatar.id
-                            ? "border-primary"
-                            : "border-border hover:border-muted-foreground"
+                          selectedAvatar === avatar.id ? "border-primary" : "border-border hover:border-muted-foreground"
                         }`}
                       >
                         <User className="w-5 h-5 text-foreground" />
@@ -87,18 +219,21 @@ export default function OnboardingPage() {
                 </div>
               </div>
 
-              {/* Form */}
-              <form className="space-y-5">
-                {/* Username */}
+              <form className="space-y-5" onSubmit={onSubmit}>
+                {error && (
+                  <div className="border border-destructive/50 bg-destructive/10 p-3">
+                    <p className="text-xs text-destructive tracking-wider">{error}</p>
+                  </div>
+                )}
+
                 <div>
-                  <label className="block text-xs text-muted-foreground tracking-wider mb-2">
-                    Username
-                  </label>
+                  <label className="block text-xs text-muted-foreground tracking-wider mb-2">Username</label>
                   <input
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="Choose a username"
+                    autoComplete="username"
                     className="w-full bg-secondary border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary px-4 py-3"
                   />
                   <p className="text-xs text-muted-foreground mt-2">
@@ -106,11 +241,8 @@ export default function OnboardingPage() {
                   </p>
                 </div>
 
-                {/* Bio */}
                 <div>
-                  <label className="block text-xs text-muted-foreground tracking-wider mb-2">
-                    Short Bio (optional)
-                  </label>
+                  <label className="block text-xs text-muted-foreground tracking-wider mb-2">Short Bio (optional)</label>
                   <textarea
                     value={bio}
                     onChange={(e) => setBio(e.target.value)}
@@ -120,25 +252,29 @@ export default function OnboardingPage() {
                   />
                 </div>
 
-                {/* Privacy Notice */}
                 <div className="bg-secondary border border-border p-4">
                   <p className="text-xs text-muted-foreground">
-                    <strong className="text-foreground">Privacy First:</strong> Your email is never shown publicly. You can post anonymously at any time, and you control what others can see on your profile.
+                    <strong className="text-foreground">Privacy First:</strong> Your email is never shown publicly. You
+                    can post anonymously at any time, and you control what others can see on your profile.
                   </p>
                 </div>
 
-                {/* Submit Button */}
                 <button
                   type="submit"
+                  disabled={submitting}
                   className="retro-btn w-full py-4 text-sm tracking-widest flex items-center justify-center gap-2"
                 >
-                  Complete Setup
+                  {submitting ? "Saving…" : "Complete Setup"}
                   <ChevronRight className="w-4 h-4" />
                 </button>
 
-                {/* Skip */}
                 <div className="text-center">
-                  <button type="button" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => void onSkip()}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                  >
                     Skip for now
                   </button>
                 </div>

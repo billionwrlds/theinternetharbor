@@ -2,15 +2,17 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { Terminal, X, Minus, Square, Send } from "lucide-react"
+import { createClient } from "@/lib/supabase"
 
 const categories = [
-  { id: "vent", label: "Vent" },
-  { id: "advice", label: "Advice" },
-  { id: "wins", label: "Wins" },
-  { id: "college", label: "College Life" },
+  { id: "vent", label: "Vent", slug: "vent" },
+  { id: "advice", label: "Advice", slug: "advice" },
+  { id: "wins", label: "Wins", slug: "wins" },
+  { id: "college", label: "College Life", slug: "college-life" },
 ]
 
 export default function CreatePostPage() {
@@ -18,6 +20,91 @@ export default function CreatePostPage() {
   const [content, setContent] = useState("")
   const [postAnonymously, setPostAnonymously] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState("vent")
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const router = useRouter()
+
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError(null)
+
+    const trimmedTitle = title.trim()
+    const trimmedBody = content.trim()
+    if (!trimmedTitle || !trimmedBody) {
+      setError("Please add a title and message.")
+      return
+    }
+
+    const cat = categories.find((c) => c.id === selectedCategory)
+    if (!cat) {
+      setError("Invalid category.")
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError || !user) {
+        setError("You must be logged in to post.")
+        router.push("/login")
+        return
+      }
+
+      const { data: existingProfile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", user.id)
+        .maybeSingle()
+
+      if (!existingProfile) {
+        const { error: profileError } = await supabase.from("profiles").insert({ id: user.id })
+        if (profileError) {
+          setError(profileError.message)
+          return
+        }
+      }
+
+      const { data: categoryRow, error: categoryError } = await supabase
+        .from("categories")
+        .select("id")
+        .eq("slug", cat.slug)
+        .maybeSingle()
+
+      if (categoryError || !categoryRow) {
+        setError(categoryError?.message ?? "Category not found. Run the schema seed in Supabase.")
+        return
+      }
+
+      const { data: post, error: insertError } = await supabase
+        .from("posts")
+        .insert({
+          author_id: user.id,
+          category_id: categoryRow.id,
+          title: trimmedTitle,
+          body: trimmedBody,
+          is_anonymous: postAnonymously,
+        })
+        .select("id")
+        .single()
+
+      if (insertError || !post) {
+        setError(insertError?.message ?? "Could not create post.")
+        return
+      }
+
+      router.push(`/forums/thread/${post.id}`)
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -44,7 +131,12 @@ export default function CreatePostPage() {
             </div>
 
             {/* Form Content */}
-            <div className="p-6 md:p-8">
+            <form className="p-6 md:p-8" onSubmit={onSubmit}>
+              {error && (
+                <div className="mb-6 border border-destructive/50 bg-destructive/10 p-3">
+                  <p className="text-xs text-destructive tracking-wider">{error}</p>
+                </div>
+              )}
               {/* Category Selection */}
               <div className="mb-6">
                 <label className="block text-xs text-muted-foreground tracking-wider mb-2">
@@ -125,12 +217,16 @@ export default function CreatePostPage() {
                   <X className="w-4 h-4" />
                   Cancel
                 </Link>
-                <button className="retro-btn px-8 py-3 text-sm tracking-widest flex items-center gap-3">
-                  Post
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="retro-btn px-8 py-3 text-sm tracking-widest flex items-center gap-3"
+                >
+                  {submitting ? "Posting…" : "Post"}
                   <Send className="w-4 h-4" />
                 </button>
               </div>
-            </div>
+            </form>
           </div>
         </div>
       </main>
