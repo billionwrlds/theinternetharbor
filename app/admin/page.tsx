@@ -126,6 +126,7 @@ export default function AdminDashboardPage() {
         .select("id,username,display_name,avatar_url,avatar_approved,role,created_at")
         .eq("avatar_approved", false)
         .not("avatar_url", "is", null)
+          .not("avatar_url", "like", "preset:%")
         .order("created_at", { ascending: true })
         .limit(50),
       supabase

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useRef, useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Header } from "@/components/header"
@@ -21,9 +21,15 @@ const USERNAME_RE = /^[a-zA-Z0-9_-]{3,30}$/
 
 export default function EditProfilePage() {
   const router = useRouter()
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [username, setUsername] = useState("")
   const [bio, setBio] = useState("")
   const [selectedAvatar, setSelectedAvatar] = useState(1)
+  const [avatarMode, setAvatarMode] = useState<"preset" | "uploaded">("preset")
+  const [uploadedAvatarUrl, setUploadedAvatarUrl] = useState<string | null>(null)
+  const [uploadedPreviewUrl, setUploadedPreviewUrl] = useState<string | null>(null)
+  const [uploadedPending, setUploadedPending] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -44,7 +50,7 @@ export default function EditProfilePage() {
 
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("username, bio, avatar_url")
+        .select("username, bio, avatar_url, avatar_approved")
         .eq("id", user.id)
         .maybeSingle()
 
@@ -61,6 +67,13 @@ export default function EditProfilePage() {
         if (profile.avatar_url?.startsWith("preset:")) {
           const n = parseInt(profile.avatar_url.replace("preset:", ""), 10)
           if (!Number.isNaN(n) && n >= 1 && n <= 6) setSelectedAvatar(n)
+          setAvatarMode("preset")
+          setUploadedAvatarUrl(null)
+          setUploadedPending(false)
+        } else if (profile.avatar_url) {
+          setAvatarMode("uploaded")
+          setUploadedAvatarUrl(profile.avatar_url)
+          setUploadedPending(profile.avatar_approved === false)
         }
       }
 
@@ -72,6 +85,79 @@ export default function EditProfilePage() {
       cancelled = true
     }
   }, [router])
+
+  useEffect(() => {
+    return () => {
+      if (uploadedPreviewUrl) URL.revokeObjectURL(uploadedPreviewUrl)
+    }
+  }, [uploadedPreviewUrl])
+
+  async function onPickAvatarFile(file: File | null) {
+    if (!file) return
+    setError(null)
+
+    const maxBytes = 2 * 1024 * 1024
+    if (file.size > maxBytes) {
+      setError("Avatar must be 2MB or smaller.")
+      return
+    }
+
+    if (!/^image\/(png|jpe?g|gif|webp)$/i.test(file.type)) {
+      setError("Please upload a PNG, JPG, GIF, or WebP image.")
+      return
+    }
+
+    setUploading(true)
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        router.replace("/login")
+        return
+      }
+
+      // Local preview immediately
+      if (uploadedPreviewUrl) URL.revokeObjectURL(uploadedPreviewUrl)
+      const preview = URL.createObjectURL(file)
+      setUploadedPreviewUrl(preview)
+
+      const ext = file.name.split(".").pop()?.toLowerCase() || "png"
+      const safeExt = ["png", "jpg", "jpeg", "gif", "webp"].includes(ext) ? ext : "png"
+      const objectPath = `${user.id}/${Date.now()}-${Math.random().toString(16).slice(2)}.${safeExt}`
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(objectPath, file, { upsert: false, contentType: file.type })
+
+      if (uploadError) throw new Error(uploadError.message)
+
+      const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(objectPath)
+      const publicUrl = urlData.publicUrl
+
+      const { error: profErr } = await supabase
+        .from("profiles")
+        .upsert(
+          {
+            id: user.id,
+            avatar_url: publicUrl,
+            avatar_approved: false,
+          },
+          { onConflict: "id" }
+        )
+
+      if (profErr) throw new Error(profErr.message)
+
+      setAvatarMode("uploaded")
+      setUploadedAvatarUrl(publicUrl)
+      setUploadedPending(true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Upload failed.")
+    } finally {
+      setUploading(false)
+    }
+  }
 
   async function onSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -100,7 +186,9 @@ export default function EditProfilePage() {
           username: u,
           display_name: u,
           bio: bio.trim() || null,
-          avatar_url: `preset:${selectedAvatar}`,
+          avatar_url: avatarMode === "preset" ? `preset:${selectedAvatar}` : uploadedAvatarUrl,
+          // Presets should never show up in admin approval queue.
+          avatar_approved: avatarMode === "preset" ? true : undefined,
         },
         { onConflict: "id" }
       )
@@ -167,9 +255,23 @@ export default function EditProfilePage() {
                   <label className="block text-xs text-muted-foreground tracking-wider mb-4">Avatar</label>
                   <div className="flex items-center gap-4">
                     <div
-                      className={`w-24 h-24 ${avatarOptions.find((a) => a.id === selectedAvatar)?.color} border-2 border-primary flex items-center justify-center shrink-0`}
+                      className={`w-24 h-24 ${
+                        avatarMode === "preset"
+                          ? avatarOptions.find((a) => a.id === selectedAvatar)?.color
+                          : "bg-secondary"
+                      } border-2 border-primary flex items-center justify-center shrink-0 overflow-hidden relative`}
                     >
-                      <User className="w-12 h-12 text-foreground" />
+                      {avatarMode === "uploaded" && (uploadedPreviewUrl || uploadedAvatarUrl) ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={uploadedPreviewUrl ?? uploadedAvatarUrl ?? ""}
+                          alt="Avatar preview"
+                          className="w-full h-full object-cover"
+                          style={{ imageRendering: "pixelated" }}
+                        />
+                      ) : (
+                        <User className="w-12 h-12 text-foreground" />
+                      )}
                     </div>
 
                     <div className="flex flex-wrap gap-2">
@@ -177,7 +279,11 @@ export default function EditProfilePage() {
                         <button
                           key={avatar.id}
                           type="button"
-                          onClick={() => setSelectedAvatar(avatar.id)}
+                          onClick={() => {
+                            setSelectedAvatar(avatar.id)
+                            setAvatarMode("preset")
+                            setUploadedPending(false)
+                          }}
                           className={`w-10 h-10 ${avatar.color} border transition-colors flex items-center justify-center ${
                             selectedAvatar === avatar.id ? "border-primary" : "border-border hover:border-muted-foreground"
                           }`}
@@ -187,12 +293,36 @@ export default function EditProfilePage() {
                       ))}
                       <button
                         type="button"
-                        className="w-10 h-10 bg-secondary border border-border hover:border-muted-foreground transition-colors flex items-center justify-center"
+                        disabled={uploading}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-10 h-10 bg-secondary border border-border hover:border-muted-foreground transition-colors flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed"
+                        title="Upload a custom avatar (requires admin approval)"
                       >
                         <Camera className="w-5 h-5 text-muted-foreground" />
                       </button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+                        className="hidden"
+                        onChange={(e) => void onPickAvatarFile(e.target.files?.[0] ?? null)}
+                      />
                     </div>
                   </div>
+                  {avatarMode === "uploaded" && (
+                    <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
+                      {uploadedPending ? (
+                        <span>
+                          Your uploaded avatar is <span className="text-primary">pending admin approval</span>. You can keep using presets while you wait.
+                        </span>
+                      ) : (
+                        <span>Uploaded avatar set.</span>
+                      )}
+                    </p>
+                  )}
+                  {uploading && (
+                    <p className="text-xs text-muted-foreground mt-2 tracking-wider">Uploading…</p>
+                  )}
                 </div>
 
                 <div className="mb-6">
