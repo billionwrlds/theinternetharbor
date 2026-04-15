@@ -64,7 +64,7 @@ export default function HomePage() {
   }, [])
 
   const authorLabel = (post: HomePost) => {
-    if (post.is_anonymous) return "Anonymous"
+    if (post.is_anonymous) return "Anonymous Sailor"
     const p = Array.isArray(post.profiles) ? post.profiles[0] : post.profiles
     return p?.display_name || p?.username || "Member"
   }

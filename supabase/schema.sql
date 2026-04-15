@@ -204,6 +204,7 @@ create table if not exists public.comments (
   post_id uuid not null references public.posts (id) on delete cascade,
   author_id uuid not null references public.profiles (id) on delete cascade,
   body text not null,
+  is_anonymous boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -211,6 +212,10 @@ create table if not exists public.comments (
 -- Nested replies (adds column on existing projects too)
 alter table public.comments
   add column if not exists parent_comment_id uuid references public.comments (id) on delete cascade;
+
+-- Anonymous replies (adds column on existing projects too)
+alter table public.comments
+  add column if not exists is_anonymous boolean not null default false;
 
 -- Replies are capped at 500 characters
 do $$

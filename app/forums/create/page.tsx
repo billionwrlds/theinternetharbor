@@ -17,7 +17,7 @@ const POST_BODY_MAX_CHARS = 15000
 export default function CreatePostPage() {
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
-  const [postAnonymously, setPostAnonymously] = useState(true)
+  const [postAnonymously, setPostAnonymously] = useState(false)
   const [categories, setCategories] = useState<CategoryOption[]>([])
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)

@@ -30,11 +30,13 @@ type CommentRow = {
   author_id: string
   parent_comment_id: string | null
   body: string
+  is_anonymous: boolean
   created_at: string | null
   profiles: { username: string | null; display_name: string | null; avatar_url: string | null; avatar_approved: boolean | null } | { username: string | null; display_name: string | null; avatar_url: string | null; avatar_approved: boolean | null }[] | null
 }
 
 const REPLY_MAX_CHARS = 500
+const ANON_DISPLAY_NAME = "Anonymous Sailor"
 
 async function loadReactionAggregates(
   supabase: ReturnType<typeof createClient>,
@@ -107,8 +109,15 @@ export default function ThreadPage() {
   const [replyBusy, setReplyBusy] = useState(false)
   const [replyError, setReplyError] = useState<string | null>(null)
   const [replyToCommentId, setReplyToCommentId] = useState<string | null>(null)
+  const [replyAnonymously, setReplyAnonymously] = useState(false)
   const [hasSession, setHasSession] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [currentProfile, setCurrentProfile] = useState<{
+    username: string | null
+    display_name: string | null
+    avatar_url: string | null
+    avatar_approved: boolean | null
+  } | null>(null)
   const [reportOpen, setReportOpen] = useState(false)
   const [reportType, setReportType] = useState<"post" | "comment">("post")
   const [reportItemId, setReportItemId] = useState("")
@@ -138,6 +147,25 @@ export default function ThreadPage() {
     const userId = user?.id
     setHasSession(!!user)
     setCurrentUserId(userId ?? null)
+    setReplyAnonymously(false)
+
+    if (userId) {
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("username,display_name,avatar_url,avatar_approved")
+        .eq("id", userId)
+        .maybeSingle()
+      setCurrentProfile(
+        (profileData as {
+          username: string | null
+          display_name: string | null
+          avatar_url: string | null
+          avatar_approved: boolean | null
+        } | null) ?? null
+      )
+    } else {
+      setCurrentProfile(null)
+    }
 
     const { data: postData, error: postError } = await supabase
       .from("posts")
@@ -161,56 +189,80 @@ export default function ThreadPage() {
 
     setPost(postData as PostRow)
 
-    const nestedSelect = "id,author_id,parent_comment_id,body,created_at,profiles(username,display_name,avatar_url,avatar_approved)"
-    const flatSelect = "id,author_id,body,created_at,profiles(username,display_name,avatar_url,avatar_approved)"
+    const nestedSelectAll =
+      "id,author_id,parent_comment_id,body,is_anonymous,created_at,profiles(username,display_name,avatar_url,avatar_approved)"
+    const noParentSelectAll =
+      "id,author_id,body,is_anonymous,created_at,profiles(username,display_name,avatar_url,avatar_approved)"
+    const nestedSelectNoAnon =
+      "id,author_id,parent_comment_id,body,created_at,profiles(username,display_name,avatar_url,avatar_approved)"
+    const flatSelectNoAnon =
+      "id,author_id,body,created_at,profiles(username,display_name,avatar_url,avatar_approved)"
 
-    const { data: commentsData, error: commentsError } = await supabase
-      .from("comments")
-      .select(nestedSelect)
-      .eq("post_id", id)
-      .order("created_at", { ascending: true })
+    const tryFetch = async (select: string) =>
+      supabase
+        .from("comments")
+        .select(select)
+        .eq("post_id", id)
+        .order("created_at", { ascending: true })
 
-    if (commentsError) {
-      const missingParentCol =
-        commentsError.message.includes("parent_comment_id") && commentsError.message.includes("does not exist")
-      if (!missingParentCol) {
-        setError(commentsError.message)
-        setComments([])
-      } else {
-        // Backwards-compat if schema.sql hasn't been applied yet.
-        const { data: fallbackData, error: fallbackError } = await supabase
-          .from("comments")
-          .select(flatSelect)
-          .eq("post_id", id)
-          .order("created_at", { ascending: true })
+    const normalize = (rows: any[], opts: { hasParent: boolean; hasAnon: boolean }) =>
+      (rows ?? []).map((r) => ({
+        ...r,
+        parent_comment_id: opts.hasParent ? (r.parent_comment_id ?? null) : null,
+        is_anonymous: opts.hasAnon ? !!r.is_anonymous : false,
+      })) as CommentRow[]
 
-        if (fallbackError) {
-          setError(fallbackError.message)
-          setComments([])
-        } else {
-          const list = ((fallbackData ?? []) as Omit<CommentRow, "parent_comment_id">[]).map((c) => ({
-            ...c,
-            parent_comment_id: null,
-          })) as CommentRow[]
-          setComments(list)
-          const cids = list.map((c) => c.id)
-          const agg = await loadReactionAggregates(supabase, id, cids, userId)
-          setPostLikeCount(agg.postLikes)
-          setPostLiked(agg.postLiked)
-          setCommentLikeCounts(agg.commentCounts)
-          setCommentLiked(agg.commentLiked)
-        }
-      }
+    let list: CommentRow[] = []
+    const first = await tryFetch(nestedSelectAll)
+    if (!first.error) {
+      list = normalize(first.data ?? [], { hasParent: true, hasAnon: true })
     } else {
-      const list = (commentsData ?? []) as CommentRow[]
-      setComments(list)
-      const cids = list.map((c) => c.id)
-      const agg = await loadReactionAggregates(supabase, id, cids, userId)
-      setPostLikeCount(agg.postLikes)
-      setPostLiked(agg.postLiked)
-      setCommentLikeCounts(agg.commentCounts)
-      setCommentLiked(agg.commentLiked)
+      const msg = first.error.message
+      const missingParent = msg.includes("parent_comment_id") && msg.includes("does not exist")
+      const missingAnon = msg.includes("is_anonymous") && msg.includes("does not exist")
+
+      if (missingParent && missingAnon) {
+        const r = await tryFetch(flatSelectNoAnon)
+        if (r.error) {
+          setError(r.error.message)
+          setComments([])
+          setLoading(false)
+          return
+        }
+        list = normalize(r.data ?? [], { hasParent: false, hasAnon: false })
+      } else if (missingParent) {
+        const r = await tryFetch(noParentSelectAll)
+        if (r.error) {
+          setError(r.error.message)
+          setComments([])
+          setLoading(false)
+          return
+        }
+        list = normalize(r.data ?? [], { hasParent: false, hasAnon: true })
+      } else if (missingAnon) {
+        const r = await tryFetch(nestedSelectNoAnon)
+        if (r.error) {
+          setError(r.error.message)
+          setComments([])
+          setLoading(false)
+          return
+        }
+        list = normalize(r.data ?? [], { hasParent: true, hasAnon: false })
+      } else {
+        setError(first.error.message)
+        setComments([])
+        setLoading(false)
+        return
+      }
     }
+
+    setComments(list)
+    const cids = list.map((c) => c.id)
+    const agg = await loadReactionAggregates(supabase, id, cids, userId)
+    setPostLikeCount(agg.postLikes)
+    setPostLiked(agg.postLiked)
+    setCommentLikeCounts(agg.commentCounts)
+    setCommentLiked(agg.commentLiked)
 
     setLoading(false)
   }, [id])
@@ -249,19 +301,42 @@ export default function ThreadPage() {
         post_id: id,
         author_id: user.id,
         body: text,
+        is_anonymous: replyAnonymously,
       }
       if (replyToCommentId) payload.parent_comment_id = replyToCommentId
 
-      let insertError = (await supabase.from("comments").insert(payload)).error
-      if (
-        insertError &&
-        replyToCommentId &&
-        insertError.message.includes("parent_comment_id") &&
-        insertError.message.includes("does not exist")
-      ) {
-        // Schema not applied yet — fall back to posting a top-level reply.
-        setReplyToCommentId(null)
-        insertError = (await supabase.from("comments").insert({ post_id: id, author_id: user.id, body: text })).error
+      let insertError: { message: string } | null = null
+      for (let i = 0; i < 3; i++) {
+        const { error } = await supabase.from("comments").insert(payload)
+        if (!error) {
+          insertError = null
+          break
+        }
+
+        const msg = error.message
+        const missingParentCol =
+          typeof payload.parent_comment_id !== "undefined" &&
+          msg.includes("parent_comment_id") &&
+          msg.includes("does not exist")
+        if (missingParentCol) {
+          // Schema not applied yet — fall back to posting a top-level reply.
+          delete payload.parent_comment_id
+          setReplyToCommentId(null)
+          continue
+        }
+
+        const missingAnonCol =
+          typeof payload.is_anonymous !== "undefined" &&
+          msg.includes("is_anonymous") &&
+          msg.includes("does not exist")
+        if (missingAnonCol) {
+          // Backwards-compat if schema.sql hasn't been applied yet.
+          delete payload.is_anonymous
+          continue
+        }
+
+        insertError = error
+        break
       }
 
       if (insertError) {
@@ -271,6 +346,7 @@ export default function ThreadPage() {
 
       setReplyBody("")
       setReplyToCommentId(null)
+      setReplyAnonymously(false)
       await loadThread()
     } catch (err) {
       setReplyError(err instanceof Error ? err.message : "Could not post reply.")
@@ -360,7 +436,7 @@ export default function ThreadPage() {
     isAnonymous?: boolean
     profiles: PostRow["profiles"] | CommentRow["profiles"]
   }) => {
-    if (opts.isAnonymous) return "Anonymous"
+    if (opts.isAnonymous) return ANON_DISPLAY_NAME
     const p = Array.isArray(opts.profiles) ? opts.profiles[0] : opts.profiles
     return p?.display_name || p?.username || "Member"
   }
@@ -397,9 +473,10 @@ export default function ThreadPage() {
   const renderComment = (comment: CommentRow, depth = 0) => {
     const kids = commentChildren[comment.id] ?? []
     const isAuthor = !!currentUserId && comment.author_id === currentUserId
+    const isAnonymous = !!comment.is_anonymous
     const indent = depth === 0 ? "" : "border-l border-border pl-4 ml-2"
 
-  const commentProfile = (c: CommentRow) => Array.isArray(c.profiles) ? c.profiles[0] : c.profiles
+    const commentProfile = (c: CommentRow) => (Array.isArray(c.profiles) ? c.profiles[0] : c.profiles)
 
     return (
       <div key={comment.id} className={`terminal-window ${indent}`}>
@@ -407,17 +484,22 @@ export default function ThreadPage() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <UserAvatar
-                avatarUrl={commentProfile(comment)?.avatar_url ?? null}
-                avatarApproved={commentProfile(comment)?.avatar_approved ?? false}
+                avatarUrl={isAnonymous ? null : (commentProfile(comment)?.avatar_url ?? null)}
+                avatarApproved={isAnonymous ? false : (commentProfile(comment)?.avatar_approved ?? false)}
                 size="w-10 h-10"
                 className="shrink-0"
               />
               <div>
-                <span className="text-sm text-foreground">{authorLabel({ profiles: comment.profiles })}</span>
+                <span className="text-sm text-foreground">
+                  {authorLabel({ isAnonymous, profiles: comment.profiles })}
+                </span>
                 {comment.created_at && (
                   <span className="text-xs text-muted-foreground ml-2">
                     · {format(new Date(comment.created_at), "MMM d, h:mm a")}
                   </span>
+                )}
+                {isAnonymous && (
+                  <span className="text-xs text-primary ml-2">· Posted anonymously</span>
                 )}
               </div>
             </div>
@@ -727,6 +809,32 @@ export default function ThreadPage() {
                       {replyError && (
                         <p className="text-xs text-destructive">{replyError}</p>
                       )}
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <UserAvatar
+                            avatarUrl={replyAnonymously ? null : (currentProfile?.avatar_url ?? null)}
+                            avatarApproved={replyAnonymously ? false : (currentProfile?.avatar_approved ?? false)}
+                            size="w-8 h-8"
+                          />
+                          <div className="text-xs">
+                            <span className="text-muted-foreground mr-2">Posting as</span>
+                            <span className="text-foreground">
+                              {replyAnonymously
+                                ? ANON_DISPLAY_NAME
+                                : (currentProfile?.display_name || currentProfile?.username || "Member")}
+                            </span>
+                          </div>
+                        </div>
+                        <label className="flex items-center gap-2 text-xs text-muted-foreground tracking-wider select-none">
+                          <input
+                            type="checkbox"
+                            checked={replyAnonymously}
+                            onChange={(e) => setReplyAnonymously(e.target.checked)}
+                            className="accent-primary"
+                          />
+                          Post anonymously
+                        </label>
+                      </div>
                       <textarea
                         value={replyBody}
                         onChange={(e) => setReplyBody(e.target.value)}
