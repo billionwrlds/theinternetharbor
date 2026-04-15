@@ -21,10 +21,15 @@ create table if not exists public.profiles (
   username text unique,
   display_name text,
   avatar_url text,
+  avatar_approved boolean not null default false,
   bio text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Add avatar_approved on existing deployments
+alter table public.profiles
+  add column if not exists avatar_approved boolean not null default false;
 
 drop trigger if exists set_profiles_updated_at on public.profiles;
 create trigger set_profiles_updated_at
@@ -438,6 +443,73 @@ begin
     for select
     to authenticated
     using (true);
+  end if;
+end
+$$;
+
+-- AVATARS STORAGE BUCKET
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'avatars',
+  'avatars',
+  true,
+  2097152,  -- 2 MB
+  array['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+)
+on conflict (id) do update set
+  file_size_limit   = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+-- Storage RLS: anyone can read; only the owner can upload/replace their own file
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'storage' and tablename = 'objects' and policyname = 'avatars public read'
+  ) then
+    create policy "avatars public read"
+    on storage.objects for select
+    to public
+    using (bucket_id = 'avatars');
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'storage' and tablename = 'objects' and policyname = 'avatars owner upload'
+  ) then
+    create policy "avatars owner upload"
+    on storage.objects for insert
+    to authenticated
+    with check (
+      bucket_id = 'avatars'
+      and (storage.foldername(name))[1] = auth.uid()::text
+    );
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'storage' and tablename = 'objects' and policyname = 'avatars owner update'
+  ) then
+    create policy "avatars owner update"
+    on storage.objects for update
+    to authenticated
+    using (
+      bucket_id = 'avatars'
+      and (storage.foldername(name))[1] = auth.uid()::text
+    );
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'storage' and tablename = 'objects' and policyname = 'avatars owner delete'
+  ) then
+    create policy "avatars owner delete"
+    on storage.objects for delete
+    to authenticated
+    using (
+      bucket_id = 'avatars'
+      and (storage.foldername(name))[1] = auth.uid()::text
+    );
   end if;
 end
 $$;

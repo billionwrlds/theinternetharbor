@@ -7,6 +7,7 @@ import { MessageSquare, Bookmark, Plus, Share2, Users, Heart, Search } from "luc
 import { formatDistanceToNow } from "date-fns"
 import { useEffect, useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase"
+import { UserAvatar } from "@/components/user-avatar"
 
 const sidebarLinks = [
   { icon: MessageSquare, label: "All Posts", href: "/forums", active: true },
@@ -28,7 +29,7 @@ type PostRow = {
   created_at: string | null
   is_anonymous: boolean
   categories: { name: string | null; slug: string | null } | { name: string | null; slug: string | null }[] | null
-  profiles: { username: string | null; display_name: string | null; avatar_url: string | null } | { username: string | null; display_name: string | null; avatar_url: string | null }[] | null
+  profiles: { username: string | null; display_name: string | null; avatar_url: string | null; avatar_approved: boolean | null } | { username: string | null; display_name: string | null; avatar_url: string | null; avatar_approved: boolean | null }[] | null
   comments: { count: number }[] | null
   reactions: { count: number }[] | null
 }
@@ -64,7 +65,7 @@ export default function ForumsPage() {
             ? supabase
                 .from("posts")
                 .select(
-                  "id,title,body,created_at,is_anonymous,categories(name,slug),profiles(username,display_name,avatar_url),comments(count),reactions(count)"
+                  "id,title,body,created_at,is_anonymous,categories(name,slug),profiles(username,display_name,avatar_url,avatar_approved),comments(count),reactions(count)"
                 )
                 .or(`title.ilike.${pattern},body.ilike.${pattern}`)
                 .order("created_at", { ascending: false })
@@ -72,7 +73,7 @@ export default function ForumsPage() {
             : supabase
                 .from("posts")
                 .select(
-                  "id,title,body,created_at,is_anonymous,categories(name,slug),profiles(username,display_name,avatar_url),comments(count),reactions(count)"
+                  "id,title,body,created_at,is_anonymous,categories(name,slug),profiles(username,display_name,avatar_url,avatar_approved),comments(count),reactions(count)"
                 )
                 .order("created_at", { ascending: false })
                 .limit(25),
@@ -312,6 +313,7 @@ export default function ForumsPage() {
                     post.body.length > 220 ? `${post.body.slice(0, 220).trim()}…` : post.body
                   const commentsCount = Array.isArray(post.comments) ? post.comments[0]?.count ?? 0 : 0
                   const likesCount = Array.isArray(post.reactions) ? post.reactions[0]?.count ?? 0 : 0
+                  const profile = Array.isArray(post.profiles) ? post.profiles[0] : post.profiles
 
                   return (
                     <article key={post.id} className="terminal-window">
@@ -324,9 +326,12 @@ export default function ForumsPage() {
                     </div>
                     <div className="p-5">
                       <div className="flex gap-4">
-                        <div className="w-12 h-12 bg-secondary border border-border shrink-0 flex items-center justify-center">
-                          <span className="text-muted-foreground text-lg">?</span>
-                        </div>
+                        <UserAvatar
+                          avatarUrl={post.is_anonymous ? null : profile?.avatar_url}
+                          avatarApproved={post.is_anonymous ? false : (profile?.avatar_approved ?? false)}
+                          size="w-12 h-12"
+                          className="shrink-0"
+                        />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-4 mb-2">
                             <Link 

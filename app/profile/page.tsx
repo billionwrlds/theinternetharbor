@@ -8,6 +8,7 @@ import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { Settings, Heart, MessageSquare, Grid, List, Plus } from "lucide-react"
 import { createClient } from "@/lib/supabase"
+import { UserAvatar } from "@/components/user-avatar"
 
 type ProfileRow = {
   username: string | null
@@ -15,6 +16,7 @@ type ProfileRow = {
   bio: string | null
   created_at: string | null
   avatar_url: string | null
+  avatar_approved: boolean | null
 }
 
 type PostRow = {
@@ -50,7 +52,7 @@ export default function ProfilePage() {
 
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
-        .select("username, display_name, bio, created_at, avatar_url")
+        .select("username, display_name, bio, created_at, avatar_url, avatar_approved")
         .eq("id", user.id)
         .maybeSingle()
 
@@ -86,27 +88,6 @@ export default function ProfilePage() {
   const displayName = profile?.display_name || profile?.username || "Member"
   const tagline = profile?.bio ? profile.bio.slice(0, 120) + (profile.bio.length > 120 ? "…" : "") : ""
 
-  const avatarPreset = (() => {
-    const raw = profile?.avatar_url
-    if (!raw?.startsWith("preset:")) return null
-    const n = parseInt(raw.replace("preset:", ""), 10)
-    return Number.isFinite(n) ? n : null
-  })()
-
-  const avatarColor =
-    avatarPreset === 1
-      ? "bg-primary/30"
-      : avatarPreset === 2
-        ? "bg-blue-500/30"
-        : avatarPreset === 3
-          ? "bg-purple-500/30"
-          : avatarPreset === 4
-            ? "bg-orange-500/30"
-            : avatarPreset === 5
-              ? "bg-pink-500/30"
-              : avatarPreset === 6
-                ? "bg-green-500/30"
-                : "bg-secondary"
 
   if (loading) {
     return (
@@ -131,9 +112,12 @@ export default function ProfilePage() {
               <div className="terminal-window mb-4">
                 <div className="p-6">
                   <div className="flex flex-col items-center mb-6">
-                    <div className={`w-32 h-32 ${avatarColor} border border-border mb-4 flex items-center justify-center`}>
-                      <span className="text-muted-foreground text-4xl">?</span>
-                    </div>
+                    <UserAvatar
+                      avatarUrl={profile?.avatar_url}
+                      avatarApproved={profile?.avatar_approved}
+                      size="w-32 h-32"
+                      className="mb-4"
+                    />
                     <span className="px-3 py-1 border border-primary text-xs text-primary tracking-wider">Member</span>
                   </div>
 

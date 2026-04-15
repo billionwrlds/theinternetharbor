@@ -12,6 +12,7 @@ import { ensureProfileExists } from "@/lib/profile"
 import { ReactionButton } from "@/components/reaction-button"
 import { ReportModal } from "@/components/report-modal"
 import { DeleteModal } from "@/components/delete-modal"
+import { UserAvatar } from "@/components/user-avatar"
 
 type PostRow = {
   id: string
@@ -21,7 +22,7 @@ type PostRow = {
   created_at: string | null
   is_anonymous: boolean
   categories: { name: string | null } | { name: string | null }[] | null
-  profiles: { username: string | null; display_name: string | null } | { username: string | null; display_name: string | null }[] | null
+  profiles: { username: string | null; display_name: string | null; avatar_url: string | null; avatar_approved: boolean | null } | { username: string | null; display_name: string | null; avatar_url: string | null; avatar_approved: boolean | null }[] | null
 }
 
 type CommentRow = {
@@ -30,7 +31,7 @@ type CommentRow = {
   parent_comment_id: string | null
   body: string
   created_at: string | null
-  profiles: { username: string | null; display_name: string | null } | { username: string | null; display_name: string | null }[] | null
+  profiles: { username: string | null; display_name: string | null; avatar_url: string | null; avatar_approved: boolean | null } | { username: string | null; display_name: string | null; avatar_url: string | null; avatar_approved: boolean | null }[] | null
 }
 
 const REPLY_MAX_CHARS = 500
@@ -140,7 +141,7 @@ export default function ThreadPage() {
 
     const { data: postData, error: postError } = await supabase
       .from("posts")
-      .select("id,author_id,title,body,created_at,is_anonymous,categories(name),profiles(username,display_name)")
+      .select("id,author_id,title,body,created_at,is_anonymous,categories(name),profiles(username,display_name,avatar_url,avatar_approved)")
       .eq("id", id)
       .maybeSingle()
 
@@ -160,8 +161,8 @@ export default function ThreadPage() {
 
     setPost(postData as PostRow)
 
-    const nestedSelect = "id,author_id,parent_comment_id,body,created_at,profiles(username,display_name)"
-    const flatSelect = "id,author_id,body,created_at,profiles(username,display_name)"
+    const nestedSelect = "id,author_id,parent_comment_id,body,created_at,profiles(username,display_name,avatar_url,avatar_approved)"
+    const flatSelect = "id,author_id,body,created_at,profiles(username,display_name,avatar_url,avatar_approved)"
 
     const { data: commentsData, error: commentsError } = await supabase
       .from("comments")
@@ -398,14 +399,19 @@ export default function ThreadPage() {
     const isAuthor = !!currentUserId && comment.author_id === currentUserId
     const indent = depth === 0 ? "" : "border-l border-border pl-4 ml-2"
 
+  const commentProfile = (c: CommentRow) => Array.isArray(c.profiles) ? c.profiles[0] : c.profiles
+
     return (
       <div key={comment.id} className={`terminal-window ${indent}`}>
         <div className="p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-secondary border border-border shrink-0 flex items-center justify-center">
-                <span className="text-muted-foreground text-sm">?</span>
-              </div>
+              <UserAvatar
+                avatarUrl={commentProfile(comment)?.avatar_url ?? null}
+                avatarApproved={commentProfile(comment)?.avatar_approved ?? false}
+                size="w-10 h-10"
+                className="shrink-0"
+              />
               <div>
                 <span className="text-sm text-foreground">{authorLabel({ profiles: comment.profiles })}</span>
                 {comment.created_at && (
@@ -580,9 +586,11 @@ export default function ThreadPage() {
                   <div className="flex flex-col md:flex-row gap-6">
                     <div className="md:w-48 shrink-0">
                       <div className="flex md:flex-col items-center md:items-start gap-4">
-                        <div className="w-20 h-20 md:w-full md:h-auto md:aspect-square bg-secondary border border-border flex items-center justify-center">
-                          <span className="text-muted-foreground text-2xl">?</span>
-                        </div>
+                        <UserAvatar
+                          avatarUrl={post.is_anonymous ? null : (() => { const p = Array.isArray(post.profiles) ? post.profiles[0] : post.profiles; return p?.avatar_url ?? null })()}
+                          avatarApproved={post.is_anonymous ? false : (() => { const p = Array.isArray(post.profiles) ? post.profiles[0] : post.profiles; return p?.avatar_approved ?? false })()}
+                          size="w-20 h-20 md:w-full md:aspect-square"
+                        />
                         <div>
                           <p className="text-sm text-foreground">
                             {authorLabel({ isAnonymous: post.is_anonymous, profiles: post.profiles })}
