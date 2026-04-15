@@ -112,6 +112,31 @@ create table if not exists public.posts (
   updated_at timestamptz not null default now()
 );
 
+-- Length constraints (defense in depth)
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'posts_title_len'
+      and conrelid = 'public.posts'::regclass
+  ) then
+    alter table public.posts
+      add constraint posts_title_len check (char_length(title) <= 200);
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'posts_body_len'
+      and conrelid = 'public.posts'::regclass
+  ) then
+    alter table public.posts
+      add constraint posts_body_len check (char_length(body) <= 5000);
+  end if;
+end
+$$;
+
 create index if not exists posts_author_id_idx on public.posts (author_id);
 create index if not exists posts_category_id_idx on public.posts (category_id);
 create index if not exists posts_created_at_idx on public.posts (created_at desc);
@@ -177,6 +202,21 @@ create table if not exists public.comments (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Replies are capped at 500 characters
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'comments_body_len'
+      and conrelid = 'public.comments'::regclass
+  ) then
+    alter table public.comments
+      add constraint comments_body_len check (char_length(body) <= 500);
+  end if;
+end
+$$;
 
 create index if not exists comments_post_id_idx on public.comments (post_id);
 create index if not exists comments_author_id_idx on public.comments (author_id);

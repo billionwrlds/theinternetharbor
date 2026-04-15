@@ -11,6 +11,9 @@ import { ensureProfileExists } from "@/lib/profile"
 
 type CategoryOption = { slug: string; name: string }
 
+const POST_TITLE_MAX_CHARS = 200
+const POST_BODY_MAX_CHARS = 5000
+
 export default function CreatePostPage() {
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
@@ -53,6 +56,14 @@ export default function CreatePostPage() {
     const trimmedBody = content.trim()
     if (!trimmedTitle || !trimmedBody) {
       setError("Please add a title and message.")
+      return
+    }
+    if (trimmedTitle.length > POST_TITLE_MAX_CHARS) {
+      setError(`Title must be ${POST_TITLE_MAX_CHARS} characters or less.`)
+      return
+    }
+    if (trimmedBody.length > POST_BODY_MAX_CHARS) {
+      setError(`Post must be ${POST_BODY_MAX_CHARS} characters or less.`)
       return
     }
 
@@ -179,6 +190,7 @@ export default function CreatePostPage() {
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="What&apos;s on your mind?"
+                  maxLength={POST_TITLE_MAX_CHARS}
                   className="w-full bg-transparent border-b border-border text-xl text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary py-3 font-heading"
                 />
               </div>
@@ -193,6 +205,7 @@ export default function CreatePostPage() {
                   onChange={(e) => setContent(e.target.value)}
                   placeholder="Share your thoughts... This is a safe space."
                   rows={12}
+                  maxLength={POST_BODY_MAX_CHARS}
                   className="w-full bg-secondary border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary p-4 font-serif leading-relaxed resize-y"
                 />
               </div>

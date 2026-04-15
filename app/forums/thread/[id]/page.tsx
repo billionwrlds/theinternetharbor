@@ -29,6 +29,8 @@ type CommentRow = {
   profiles: { username: string | null; display_name: string | null } | { username: string | null; display_name: string | null }[] | null
 }
 
+const REPLY_MAX_CHARS = 500
+
 async function loadReactionAggregates(
   supabase: ReturnType<typeof createClient>,
   postId: string,
@@ -175,6 +177,10 @@ export default function ThreadPage() {
     const text = replyBody.trim()
     if (!text) {
       setReplyError("Write something first.")
+      return
+    }
+    if (text.length > REPLY_MAX_CHARS) {
+      setReplyError(`Replies must be ${REPLY_MAX_CHARS} characters or less.`)
       return
     }
 
@@ -381,6 +387,7 @@ export default function ThreadPage() {
                         onChange={(e) => setReplyBody(e.target.value)}
                         placeholder="Write your reply…"
                         rows={4}
+                        maxLength={REPLY_MAX_CHARS}
                         className="w-full bg-secondary border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary px-4 py-3 resize-y font-serif text-sm"
                       />
                       <button
