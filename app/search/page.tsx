@@ -38,7 +38,7 @@ function SearchPageContent() {
 
       setLoading(true)
       const supabase = createClient()
-      const safe = query.replace(/"/g, '\\"').replace(/%/g, "\\%")
+      const safe = query.replace(/%/g, "\\%").replace(/_/g, "\\_")
       const pattern = `%${safe}%`
 
       const { data, error } = await supabase
@@ -46,7 +46,7 @@ function SearchPageContent() {
         .select(
           "id,title,body,created_at,categories(name),profiles(username,display_name),comments(count),reactions(count)"
         )
-        .or(`title.ilike."${pattern}",body.ilike."${pattern}"`)
+        .or(`title.ilike.${pattern},body.ilike.${pattern}`)
         .order("created_at", { ascending: false })
         .limit(50)
 

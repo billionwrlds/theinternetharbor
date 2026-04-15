@@ -5,12 +5,25 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
-import { ArrowLeft, Mail, Lock, Bell, Shield, Trash2, Save } from "lucide-react"
+import { ArrowLeft, Mail, Lock, Bell, Shield, Trash2, Save, User } from "lucide-react"
 import { createClient } from "@/lib/supabase"
+
+const avatarOptions = [
+  { id: 1, color: "bg-primary/30" },
+  { id: 2, color: "bg-blue-500/30" },
+  { id: 3, color: "bg-purple-500/30" },
+  { id: 4, color: "bg-orange-500/30" },
+  { id: 5, color: "bg-pink-500/30" },
+  { id: 6, color: "bg-green-500/30" },
+]
 
 export default function SettingsPage() {
   const router = useRouter()
   const [email, setEmail] = useState("")
+  const [selectedAvatar, setSelectedAvatar] = useState(1)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveOk, setSaveOk] = useState<string | null>(null)
   const [notifications, setNotifications] = useState({
     replies: true,
     likes: false,
@@ -32,6 +45,17 @@ export default function SettingsPage() {
         return
       }
       if (user.email) setEmail(user.email)
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("avatar_url")
+        .eq("id", user.id)
+        .maybeSingle()
+      if (cancelled) return
+      if (profile?.avatar_url?.startsWith("preset:")) {
+        const n = parseInt(profile.avatar_url.replace("preset:", ""), 10)
+        if (!Number.isNaN(n) && n >= 1 && n <= 6) setSelectedAvatar(n)
+      }
     }
 
     void load()
@@ -39,6 +63,36 @@ export default function SettingsPage() {
       cancelled = true
     }
   }, [router])
+
+  async function saveAll() {
+    setSaveError(null)
+    setSaveOk(null)
+    setSaving(true)
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        router.replace("/login")
+        return
+      }
+
+      const { error: upsertError } = await supabase
+        .from("profiles")
+        .upsert({ id: user.id, avatar_url: `preset:${selectedAvatar}` }, { onConflict: "id" })
+      if (upsertError) {
+        setSaveError(upsertError.message)
+        return
+      }
+
+      setSaveOk("Saved.")
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Could not save.")
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -57,6 +111,43 @@ export default function SettingsPage() {
 
           {/* Page Title */}
           <h1 className="font-heading text-3xl text-foreground mb-8">Settings</h1>
+
+          {/* Profile Picture */}
+          <div className="terminal-window mb-6">
+            <div className="terminal-header">
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground tracking-wider">Profile Picture</span>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="flex items-center gap-4">
+                <div
+                  className={`w-20 h-20 ${avatarOptions.find((a) => a.id === selectedAvatar)?.color} border border-border flex items-center justify-center shrink-0`}
+                >
+                  <User className="w-10 h-10 text-foreground" />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {avatarOptions.map((avatar) => (
+                    <button
+                      key={avatar.id}
+                      type="button"
+                      onClick={() => setSelectedAvatar(avatar.id)}
+                      className={`w-10 h-10 ${avatar.color} border transition-colors flex items-center justify-center ${
+                        selectedAvatar === avatar.id ? "border-primary" : "border-border hover:border-muted-foreground"
+                      }`}
+                      aria-label={`Select avatar ${avatar.id}`}
+                    >
+                      <User className="w-5 h-5 text-foreground" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground tracking-wider mt-4">
+                Choose a preset avatar. (Uploads coming later.)
+              </p>
+            </div>
+          </div>
 
           {/* Email Section */}
           <div className="terminal-window mb-6">
@@ -195,10 +286,19 @@ export default function SettingsPage() {
 
           {/* Save Button */}
           <div className="flex justify-end mt-8">
-            <button className="retro-btn px-8 py-3 text-sm tracking-widest flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              {saveError && <p className="text-xs text-destructive tracking-wider">{saveError}</p>}
+              {saveOk && <p className="text-xs text-primary tracking-wider">{saveOk}</p>}
+              <button
+                type="button"
+                onClick={() => void saveAll()}
+                disabled={saving}
+                className="retro-btn px-8 py-3 text-sm tracking-widest flex items-center gap-2"
+              >
               <Save className="w-4 h-4" />
-              Save All Changes
-            </button>
+                {saving ? "Saving…" : "Save All Changes"}
+              </button>
+            </div>
           </div>
         </div>
       </main>

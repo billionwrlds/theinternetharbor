@@ -1,0 +1,28 @@
+---
+description: Automatically create local checkpoint commits during work
+alwaysApply: true
+---
+
+# Auto checkpoint commits
+
+Create **local** git “checkpoint” commits proactively so the user can easily revert if something breaks.
+
+## When to checkpoint
+
+- Make a checkpoint commit after completing roughly **two meaningful fixes/features**, or after any **high-risk change** (DB schema, auth/RLS, routing, large refactor), whichever comes first.
+- Also checkpoint before starting a new multi-step task if the working tree is already large/dirty.
+
+## How to checkpoint (must follow)
+
+- Run `git status` and `git diff` first to review what would be committed.
+- Stage only relevant files.
+- **Never** commit secrets or local env files:
+  - Do not commit `.env*`, `*.pem`, `credentials*`, or any secret-like files.
+- Use a concise message in this style:
+  - `chore(checkpoint): <area> - <short summary>`
+  - Example: `chore(checkpoint): forums - limits + author actions`
+- Keep commits **local only** (no pushing) unless the user explicitly asks to push.
+
+## If uncertain
+
+- Prefer creating a checkpoint commit rather than leaving large uncommitted changes, as long as no secrets are included.

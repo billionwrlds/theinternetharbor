@@ -12,7 +12,7 @@ import { ensureProfileExists } from "@/lib/profile"
 type CategoryOption = { slug: string; name: string }
 
 const POST_TITLE_MAX_CHARS = 200
-const POST_BODY_MAX_CHARS = 5000
+const POST_BODY_MAX_CHARS = 15000
 
 export default function CreatePostPage() {
   const [title, setTitle] = useState("")

@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
-import { MessageSquare, Bookmark, Plus, Share2, Users, Heart } from "lucide-react"
+import { MessageSquare, Bookmark, Plus, Share2, Users, Heart, Search } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { useEffect, useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase"
@@ -36,6 +36,7 @@ type PostRow = {
 export default function ForumsPage() {
   const [categories, setCategories] = useState<CategoryRow[]>([])
   const [posts, setPosts] = useState<PostRow[]>([])
+  const [searchQuery, setSearchQuery] = useState("")
   const [memberCount, setMemberCount] = useState<number | null>(null)
   const [categoryPostCounts, setCategoryPostCounts] = useState<Record<number, number>>({})
   const [loading, setLoading] = useState(true)
@@ -50,6 +51,8 @@ export default function ForumsPage() {
 
       try {
         const supabase = createClient()
+        const safeQuery = searchQuery.trim().replace(/%/g, "\\%").replace(/_/g, "\\_")
+        const pattern = `%${safeQuery}%`
 
         const [
           { data: cats, error: catsError },
@@ -57,13 +60,22 @@ export default function ForumsPage() {
           { count: profilesCount, error: profilesCountError },
         ] = await Promise.all([
           supabase.from("categories").select("id,name,slug,sort_order").order("sort_order", { ascending: true }),
-          supabase
-            .from("posts")
-            .select(
-              "id,title,body,created_at,is_anonymous,categories(name,slug),profiles(username,display_name,avatar_url),comments(count),reactions(count)"
-            )
-            .order("created_at", { ascending: false })
-            .limit(25),
+          safeQuery
+            ? supabase
+                .from("posts")
+                .select(
+                  "id,title,body,created_at,is_anonymous,categories(name,slug),profiles(username,display_name,avatar_url),comments(count),reactions(count)"
+                )
+                .or(`title.ilike.${pattern},body.ilike.${pattern}`)
+                .order("created_at", { ascending: false })
+                .limit(50)
+            : supabase
+                .from("posts")
+                .select(
+                  "id,title,body,created_at,is_anonymous,categories(name,slug),profiles(username,display_name,avatar_url),comments(count),reactions(count)"
+                )
+                .order("created_at", { ascending: false })
+                .limit(25),
           supabase.from("profiles").select("*", { count: "exact", head: true }),
         ])
 
@@ -106,11 +118,12 @@ export default function ForumsPage() {
       }
     }
 
-    void load()
+    const t = setTimeout(() => void load(), 200)
     return () => {
       cancelled = true
+      clearTimeout(t)
     }
-  }, [])
+  }, [searchQuery])
 
   const hasError = useMemo(() => Boolean(error), [error])
 
@@ -187,6 +200,30 @@ export default function ForumsPage() {
                   <Plus className="w-4 h-4" />
                   New Post
                 </Link>
+              </div>
+
+              {/* Search */}
+              <div className="terminal-window mb-6">
+                <div className="p-4">
+                  <div className="flex items-center gap-2 bg-secondary border border-border px-3 py-2">
+                    <Search className="w-4 h-4 text-muted-foreground" strokeWidth={2} />
+                    <input
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search posts by title or content…"
+                      className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none flex-1 min-w-0"
+                    />
+                    {searchQuery.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery("")}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Category Filters */}

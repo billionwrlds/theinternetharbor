@@ -132,7 +132,7 @@ begin
       and conrelid = 'public.posts'::regclass
   ) then
     alter table public.posts
-      add constraint posts_body_len check (char_length(body) <= 5000);
+      add constraint posts_body_len check (char_length(body) <= 15000) not valid;
   end if;
 end
 $$;
@@ -203,6 +203,10 @@ create table if not exists public.comments (
   updated_at timestamptz not null default now()
 );
 
+-- Nested replies (adds column on existing projects too)
+alter table public.comments
+  add column if not exists parent_comment_id uuid references public.comments (id) on delete cascade;
+
 -- Replies are capped at 500 characters
 do $$
 begin
@@ -213,13 +217,14 @@ begin
       and conrelid = 'public.comments'::regclass
   ) then
     alter table public.comments
-      add constraint comments_body_len check (char_length(body) <= 500);
+      add constraint comments_body_len check (char_length(body) <= 500) not valid;
   end if;
 end
 $$;
 
 create index if not exists comments_post_id_idx on public.comments (post_id);
 create index if not exists comments_author_id_idx on public.comments (author_id);
+create index if not exists comments_parent_comment_id_idx on public.comments (parent_comment_id);
 create index if not exists comments_created_at_idx on public.comments (created_at asc);
 
 drop trigger if exists set_comments_updated_at on public.comments;

@@ -6,23 +6,28 @@ import { X, Trash2 } from "lucide-react"
 interface DeleteModalProps {
   isOpen: boolean
   onClose: () => void
-  onConfirm: () => void
+  onConfirm: () => Promise<void> | void
   type: "post" | "comment"
   title?: string
 }
 
 export function DeleteModal({ isOpen, onClose, onConfirm, type, title }: DeleteModalProps) {
   const [isDeleting, setIsDeleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   if (!isOpen) return null
 
   const handleDelete = async () => {
     setIsDeleting(true)
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500))
-    onConfirm()
-    setIsDeleting(false)
-    onClose()
+    setError(null)
+    try {
+      await onConfirm()
+      onClose()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not delete.")
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   return (
@@ -65,6 +70,10 @@ export function DeleteModal({ isOpen, onClose, onConfirm, type, title }: DeleteM
               This action cannot be undone. All replies will also be removed.
             </p>
           </div>
+
+          {error && (
+            <p className="text-xs text-destructive tracking-wider mb-4 text-center">{error}</p>
+          )}
 
           {/* Actions */}
           <div className="flex gap-3">
