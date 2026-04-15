@@ -33,6 +33,12 @@ export function Footer() {
             Guidelines
           </Link>
           <Link
+            href="/tools/mood-check"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors tracking-wider"
+          >
+            Tools
+          </Link>
+          <Link
             href="/crisis"
             className="text-xs text-primary hover:text-primary/80 transition-colors tracking-wider"
           >

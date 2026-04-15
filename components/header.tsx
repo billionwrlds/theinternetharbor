@@ -10,6 +10,7 @@ import { UserMenu } from "./user-menu"
 const navItems = [
   { href: "/forums", label: "Forums" },
   { href: "/resources", label: "Resources" },
+  { href: "/tools", label: "Tools" },
   { href: "/crisis", label: "Get Help" },
 ]
 

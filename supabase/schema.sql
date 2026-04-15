@@ -582,6 +582,43 @@ begin
 end
 $$;
 
+-- MOODS (mood check-in tool)
+create table if not exists public.moods (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  mood text not null check (mood in ('great', 'good', 'okay', 'low', 'struggling')),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists moods_user_id_idx on public.moods (user_id);
+create index if not exists moods_created_at_idx on public.moods (created_at desc);
+
+alter table public.moods enable row level security;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='moods' and policyname='users can view own moods'
+  ) then
+    create policy "users can view own moods"
+    on public.moods
+    for select
+    to authenticated
+    using (auth.uid() = user_id);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='moods' and policyname='users can insert own moods'
+  ) then
+    create policy "users can insert own moods"
+    on public.moods
+    for insert
+    to authenticated
+    with check (auth.uid() = user_id);
+  end if;
+end
+$$;
+
 -- Default categories
 insert into public.categories (name, slug, description, sort_order)
 values
