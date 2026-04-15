@@ -22,6 +22,7 @@ create table if not exists public.profiles (
   display_name text,
   avatar_url text,
   avatar_approved boolean not null default false,
+  role text not null default 'user' check (role in ('user', 'admin')),
   bio text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -30,6 +31,26 @@ create table if not exists public.profiles (
 -- Add avatar_approved on existing deployments
 alter table public.profiles
   add column if not exists avatar_approved boolean not null default false;
+
+-- Roles (adds column on existing deployments too)
+alter table public.profiles
+  add column if not exists role text not null default 'user' check (role in ('user', 'admin'));
+
+-- Helper for admin policies
+create or replace function public.is_admin(uid uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.profiles p
+    where p.id = uid
+      and p.role = 'admin'
+  );
+$$;
 
 drop trigger if exists set_profiles_updated_at on public.profiles;
 create trigger set_profiles_updated_at
@@ -69,6 +90,17 @@ begin
     to authenticated
     using (auth.uid() = id)
     with check (auth.uid() = id);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='profiles' and policyname='admins can update profiles'
+  ) then
+    create policy "admins can update profiles"
+    on public.profiles
+    for update
+    to authenticated
+    using (public.is_admin(auth.uid()))
+    with check (public.is_admin(auth.uid()));
   end if;
 end
 $$;
@@ -195,6 +227,16 @@ begin
     to authenticated
     using (auth.uid() = author_id);
   end if;
+
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='posts' and policyname='admins can delete posts'
+  ) then
+    create policy "admins can delete posts"
+    on public.posts
+    for delete
+    to authenticated
+    using (public.is_admin(auth.uid()));
+  end if;
 end
 $$;
 
@@ -285,6 +327,16 @@ begin
     for delete
     to authenticated
     using (auth.uid() = author_id);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='comments' and policyname='admins can delete comments'
+  ) then
+    create policy "admins can delete comments"
+    on public.comments
+    for delete
+    to authenticated
+    using (public.is_admin(auth.uid()));
   end if;
 end
 $$;
@@ -413,6 +465,17 @@ begin
     for insert
     to authenticated
     with check (auth.uid() = reporter_id);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='reports' and policyname='admins can update reports'
+  ) then
+    create policy "admins can update reports"
+    on public.reports
+    for update
+    to authenticated
+    using (public.is_admin(auth.uid()))
+    with check (public.is_admin(auth.uid()));
   end if;
 end
 $$;

@@ -72,6 +72,18 @@ export default function AdminReportsPage() {
         return
       }
 
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle()
+
+      if (cancelled) return
+      if (profileError || (profile as { role?: string } | null)?.role !== "admin") {
+        router.replace("/forums")
+        return
+      }
+
       const { data, error } = await supabase
         .from("reports")
         .select(
